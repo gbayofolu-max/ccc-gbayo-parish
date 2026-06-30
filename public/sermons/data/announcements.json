@@ -1,0 +1,18 @@
+{
+  "announcements": [
+    {
+      "id": 1,
+      "title": "Sunday Service Bulletin",
+      "date": "2026-06-21",
+      "type": "bulletin",
+      "pdfUrl": "/sermons/slides/sunday-bulletin-2026-06-21.pdf"
+    },
+    {
+      "id": 2,
+      "title": "Snr Evang. GbayoFolu's Message: True Worship",
+      "date": "2026-06-21",
+      "type": "sermon",
+      "pdfUrl": "/sermons/slides/true-worship.pdf"
+    }
+  ]
+}
