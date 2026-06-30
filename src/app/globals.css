@@ -1,0 +1,126 @@
+/* --------------------------------------------------------------- */
+/*  Google‑font import – Cormorant Garamond + Inter               */
+/* --------------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+
+/* --------------------------------------------------------------- */
+/*  Tailwind directives – must stay in this order                  */
+/* --------------------------------------------------------------- */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------------------------------------------------------------- */
+/*  Custom Theme Colors (Gold & Blue Branding)                    */
+/* --------------------------------------------------------------- */
+@layer base {
+  :root {
+    --color-gold: #F5C518;
+    --color-dark-gold: #D4A017;
+    --color-blue-950: #0a1628;
+    --color-blue-900: #0d2137;
+    --color-blue-800: #1a3a5c;
+  }
+}
+
+@layer utilities {
+  /* Gold colors */
+  .text-gold {
+    color: #F5C518;
+  }
+  .bg-gold {
+    background-color: #F5C518;
+  }
+  .border-gold {
+    border-color: #F5C518;
+  }
+  
+  /* Dark gold colors */
+  .text-dark-gold {
+    color: #D4A017;
+  }
+  .bg-dark-gold {
+    background-color: #D4A017;
+  }
+  .border-dark-gold {
+    border-color: #D4A017;
+  }
+  
+  /* Blue colors */
+  .text-blue-950 {
+    color: #0a1628;
+  }
+  .bg-blue-950 {
+    background-color: #0a1628;
+  }
+  .text-blue-900 {
+    color: #0d2137;
+  }
+  .bg-blue-900 {
+    background-color: #0d2137;
+  }
+}
+
+/* --------------------------------------------------------------- */
+/*  Base styles                                                   */
+/* --------------------------------------------------------------- */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/*  Background – deep navy gradient  */
+body {
+  background: linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a1628 100%);
+  min-height: 100vh;
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+}
+
+/*  Heading font  */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Cormorant Garamond', serif;
+}
+
+/*  Custom scrollbar – gold accent  */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a1628;
+}
+::-webkit-scrollbar-thumb {
+  background: #F5C518;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #D4A017;
+}
+
+/* --------------------------------------------------------------- */
+/*  Hero Text Shadows                                             */
+/* --------------------------------------------------------------- */
+.hero-heading-shadow {
+  text-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 4px 8px rgba(0, 0, 0, 0.6),
+    0 8px 16px rgba(0, 0, 0, 0.4);
+}
+
+.hero-gold-shadow {
+  text-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.9),
+    0 4px 8px rgba(0, 0, 0, 0.7),
+    0 0 20px rgba(245, 197, 24, 0.3);
+}
+
+.hero-verse-shadow {
+  text-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.8),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+}
