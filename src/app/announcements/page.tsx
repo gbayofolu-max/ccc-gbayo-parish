@@ -3,30 +3,29 @@ import { announcements } from "@/data/announcements";
 import { PdfViewer } from "@/components/PdfViewer";
 
 export const metadata = {
-  title: "Announcements & Sermon Slides | CCC Gbayo Parish",
-  description:
-    "Download the latest church announcements, hymn PDFs, Bible‑lesson PDFs and sermon slide decks.",
+  title: "Announcements & Sermon Slides | CCC Gbayo Parish",
+  description: "Download the latest church announcements, hymn PDFs, Bible-lesson PDFs and sermon slide decks.",
 };
 
 export default function AnnouncementsPage() {
   return (
-    <section className="max-w-5xl mx-auto px-4 py-12">
-      <h1 className="text-3xl md:text-4xl font-garamond text-gold mb-8 text-center">
+    <section className="max-w-5xl mx-auto px-4 py-12 bg-slate-50 min-h-screen">
+      <h1 className="text-3xl md:text-4xl font-serif text-navy mb-8 text-center font-bold">
         Announcements &amp; Sermon Slides
       </h1>
+      <div className="mx-auto mb-12 h-1 w-20 bg-gold rounded-full" />
 
       <div className="grid gap-6 sm:grid-cols-2">
         {announcements.map((a) => (
           <article
             key={a.id}
-            className="border border-gold/20 rounded-xl hover:shadow-lg hover:shadow-gold/10 transition bg-[#0a1628] p-5"
+            className="border border-gold/20 rounded-2xl hover:shadow-xl transition-all bg-white p-6 shadow-sm"
           >
-            <header className="flex flex-col gap-1">
-              <h2 className="text-xl font-semibold text-gold">{a.title}</h2>
+            <header className="flex flex-col gap-1 mb-4">
+              <h2 className="text-xl font-bold text-navy">{a.title}</h2>
               <time
+                className="text-sm text-gray-500"
                 dateTime={a.date}
-                className="text-sm text-gray-400"
-                aria-label={`Published ${new Date(a.date).toLocaleDateString()}`}
               >
                 {new Date(a.date).toLocaleDateString(undefined, {
                   year: "numeric",
@@ -37,15 +36,13 @@ export default function AnnouncementsPage() {
             </header>
 
             {a.thumbnail && (
-              <figure className="my-4">
+              <figure className="mb-4 overflow-hidden rounded-xl">
                 <Image
                   src={a.thumbnail}
                   alt={`${a.title} thumbnail`}
                   width={400}
                   height={250}
-                  className="rounded-lg object-cover"
-                  placeholder="blur"
-                  blurDataURL="/placeholder.png"
+                  className="w-full h-auto object-cover"
                 />
               </figure>
             )}
@@ -57,9 +54,9 @@ export default function AnnouncementsPage() {
                 href={a.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 inline-block px-4 py-2 bg-gold text-[#0a1628] rounded hover:bg-dark-gold transition"
+                className="mt-4 inline-block px-6 py-2 bg-navy text-gold rounded-full text-sm font-bold hover:bg-navy-mid transition"
               >
-                More info
+                More Information
               </a>
             )}
           </article>
