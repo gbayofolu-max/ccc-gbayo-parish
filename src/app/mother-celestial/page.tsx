@@ -1,80 +1,54 @@
-import Image from "next/image";
-import { motherGbayo } from "@/data/motherGbayo";
+import Image from 'next/image';
 
-export const metadata = {
-  title: "Mother Celestial S.O Gbayo | CCC Gbayo Parish",
-  description:
-    "The life and ministry of Mother Celestial S.O Gbayo, Matriarch of CCC Gbayo Parish, Ikorodu.",
-};
-
-export default function MotherCelestialPage() {
+export default function MotherCelestial() {
   return (
-    <main className="min-h-screen bg-[#0a1628] pb-20">
-      {/* Hero header */}
-      <div className="relative h-[40vh] flex items-center justify-center bg-gradient-to-b from-[#0d2137] to-[#0a1628] border-b border-gold/30">
-        <div className="text-center z-10 px-4">
-          <h1 className="text-4xl md:text-6xl font-garamond text-gold hero-gold-shadow">
-            {motherGbayo.name}
-          </h1>
-          <p className="text-lg md:text-xl text-gray-300 mt-2 italic font-inter">
-            {motherGbayo.title}
+    <div className="min-h-screen bg-slate-50 py-12 px-6">
+      <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-gold/30">
+        <div className="relative h-96 w-full">
+          <Image 
+            src="/mother/portrait.jpg" 
+            alt="Mother Celestial S.O GBAYO" 
+            fill 
+            className="object-cover"
+            priority 
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy via-transparent to-transparent" />
+          <div className="absolute bottom-6 left-6 text-white">
+            <h1 className="font-serif text-4xl font-bold">Mother Celestial S.O GBAYO</h1>
+            <p className="text-gold italic text-lg">The Deborah of Our Time</p>
+          </div>
+        </div>
+
+        <div className="p-8 md:p-12 space-y-6 text-navy leading-relaxed">
+          <p className="font-serif text-xl italic text-center text-navy-mid mb-8">
+            "A beacon of holiness and a pillar of strength in the fold of Christ."
           </p>
+          
+          <div className="space-y-4 text-lg">
+            <p>
+              Mother Celestial S.O GBAYO is a great prophetess of God and a divine instrument of grace. 
+              It was through her spiritual calling and unwavering faith that our father, 
+              <span className="font-bold text-navy-mid"> Rev. H.M Gbayo</span>, joined the celestial fold, 
+              opening a gateway of salvation for many.
+            </p>
+            <p>
+              She is truly the <span className="font-bold">Deborah of our time</span>—a leader not moved by 
+              material things, but driven by the Spirit of the Living God. She stands as a firm guard of 
+              the faith, ensuring that this institution continues in the holy legacy left by 
+              <span className="font-bold">Papa S.B.J Oshoffa</span> and <span className="font-bold">Rev. H.M Gbayo</span>.
+            </p>
+            <p className="italic bg-gold/10 p-4 rounded-lg border-l-4 border-gold">
+              Like Anna in Luke 2:36, she is found always in the temple, serving God with fasting and prayers 
+              night and day, guiding the levites and the congregation with a mother's heart and a prophet's vision.
+            </p>
+            <p>
+              Her dedication to prayer is a shelter for all who seek refuge. She is a tremendous blessing in 
+              our midst, a vessel of purity and a fountain of wisdom whose life is a living testament to the 
+              power of holiness and dedication.
+            </p>
+          </div>
         </div>
       </div>
-
-      {/* Content grid */}
-      <section className="max-w-6xl mx-auto px-6 -mt-16 relative z-20">
-        <div className="grid md:grid-cols-12 gap-10 items-start">
-          {/* Portrait column */}
-          <div className="md:col-span-5">
-            <div className="rounded-2xl overflow-hidden border-4 border-gold shadow-2xl shadow-gold/20">
-              <Image
-                src={motherGbayo.portrait}
-                alt={motherGbayo.name}
-                width={600}
-                height={800}
-                className="w-full h-auto object-cover"
-              />
-            </div>
-
-            {/* Quick‑stats cards */}
-            <div className="mt-8 grid gap-4">
-              {motherGbayo.attributes.map((attr, i) => (
-                <div
-                  key={i}
-                  className="bg-[#0d2137] p-4 rounded-lg border-l-4 border-gold"
-                >
-                  <p className="text-xs text-gold uppercase tracking-widest">
-                    {attr.label}
-                  </p>
-                  <p className="text-white font-semibold">{attr.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Biography column */}
-          <div className="md:col-span-7 bg-[#0d2137]/50 p-8 rounded-2xl border border-white/5">
-            <h2 className="text-3xl font-garamond text-gold mb-6 italic">
-              "The Deborah of Our Time"
-            </h2>
-
-            <div className="space-y-6 text-gray-200 leading-relaxed text-lg font-inter">
-              {motherGbayo.biography.map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
-
-            <div className="mt-12 p-6 border-t border-gold/20 flex items-start gap-4">
-              <div className="h-16 w-1 bg-gold rounded-full shrink-0 mt-1"></div>
-              <p className="text-gold italic font-garamond text-xl">
-                "Strength and honour are her clothing; and she shall rejoice
-                in time to come." — Proverbs 31:25
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function HeroSection() {
   return (
-    <section className="relative flex h-[90vh] w-full items-center justify-center overflow-hidden">
+    <section className="relative flex h-[90vh] w-full items-start justify-center overflow-hidden">
       {/* --------------------------------------------------- */}
       {/*  Background image (hero‑bg.jpg)                     */}
       {/* --------------------------------------------------- */}
@@ -21,23 +21,23 @@ export default function HeroSection() {
       <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/60" />
 
       {/* --------------------------------------------------- */}
-      {/*  Hero content (logo, heading, motto, CTA)           */}
+      {/*  Hero content - Shifted UP with pt-20               */}
       {/* --------------------------------------------------- */}
-      <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
+      <div className="relative z-10 mx-auto max-w-4xl px-6 text-center pt-20">
         
-        {/* Logo */}
-        <div className="mb-8">
+        {/* Logo - Reduced size for elegance */}
+        <div className="mb-6">
           <Image
             src="/logo.png"
             alt="CCC Gbayo Parish logo"
-            width={220}
-            height={220}
+            width={200}
+            height={200}
             priority
             className="mx-auto object-contain drop-shadow-2xl"
           />
         </div>
 
-        {/* Heading – with text shadow */}
+        {/* Heading – Corrected tags here */}
         <h1 className="mb-6 font-serif text-4xl font-bold leading-tight text-white md:text-6xl lg:text-7xl hero-heading-shadow">
           Welcome to{" "}
           <span className="text-gold hero-gold-shadow">
@@ -45,7 +45,7 @@ export default function HeroSection() {
           </span>
         </h1>
 
-        {/* Motto – with text shadow */}
+        {/* Motto */}
         <div className="mx-auto mb-10 max-w-2xl rounded-xl bg-black/60 px-8 py-5 backdrop-blur-sm">
           <p className="font-serif text-xl italic text-gold md:text-2xl hero-gold-shadow">
             &ldquo;And ye shall know the truth, and the truth shall make you free.&rdquo;
