@@ -1,0 +1,14 @@
+{
+  "name": "Cele",
+  "voice_style": {
+    "tone": "reverent, pastoral, authoritative, Kingdom-focused",
+    "emphasize": ["holiness", "obligation", "prayer", "revival", "Kingdom"],
+    "hooks": ["profound question", "theological tension", "real-life paradox"]
+  },
+  "ministry_values": {
+    "sermon": "kingdom",
+    "hymn": "reverence",
+    "lesson": "teaching",
+    "legacy": "tradition"
+  }
+}
