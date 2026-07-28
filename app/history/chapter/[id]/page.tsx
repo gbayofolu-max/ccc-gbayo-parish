@@ -7,8 +7,13 @@ import { useParams } from "next/navigation";
 
 export default function ChapterPage() {
   const params = useParams();
-  const id = params.id as string;
-  const chapterId = parseInt(id);
+
+  if (!params || !params.id) {
+    return null;
+  }
+
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const chapterId = parseInt(id, 10);
   
   const chapter = historyChapters.find(c => c.id === chapterId);
 

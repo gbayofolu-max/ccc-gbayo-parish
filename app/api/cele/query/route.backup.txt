@@ -1,0 +1,360 @@
+import { NextRequest, NextResponse } from "next/server";
+
+/* ============================================================================
+   ENVIRONMENT VARIABLES
+============================================================================ */
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const JINA_KEY = process.env.JINA_API_KEY;
+
+/* ============================================================================
+   CEREBRAS API KEYS
+============================================================================ */
+
+const CEREBRAS_KEYS = [
+  process.env.CEREBRAS_KEY_1,
+  process.env.CEREBRAS_KEY_2,
+  process.env.CEREBRAS_KEY_3,
+  process.env.CEREBRAS_KEY_4,
+  process.env.CEREBRAS_KEY_5,
+  process.env.CEREBRAS_KEY_6,
+].filter((k): k is string => Boolean(k));
+
+/* ============================================================================
+   GROQ API KEYS
+============================================================================ */
+
+const GROQ_KEYS = [
+  process.env.GROQ_KEY_1,
+  process.env.GROQ_KEY_2,
+  process.env.GROQ_KEY_3,
+  process.env.GROQ_KEY_4,
+  process.env.GROQ_KEY_5,
+  process.env.GROQ_KEY_6,
+].filter((k): k is string => Boolean(k));
+
+/* ============================================================================
+   CREATE EMBEDDING USING JINA
+============================================================================ */
+
+async function embed(text: string): Promise<number[]> {
+  if (!JINA_KEY) {
+    throw new Error("JINA_API_KEY missing in .env.local");
+  }
+
+  const response = await fetch("https://api.jina.ai/v1/embeddings", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${JINA_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "jina-embeddings-v3",
+      input: text,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Jina API Error (${response.status}): ${errorText.substring(0, 300)}`
+    );
+  }
+
+  const json = await response.json();
+
+  if (!json?.data?.[0]?.embedding) {
+    throw new Error("Jina returned an invalid embedding.");
+  }
+
+  const embedding = json.data[0].embedding as number[];
+
+  // Pad to 1536 dimensions for Supabase compatibility.
+  const padded = new Array(1536).fill(0);
+
+  for (let i = 0; i < embedding.length && i < 1536; i++) {
+    padded[i] = embedding[i];
+  }
+
+  return padded;
+}
+
+/* ============================================================================
+   SEARCH SUPABASE VECTOR DATABASE
+============================================================================ */
+
+async function search(embedding: number[]) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing."
+    );
+  }
+
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/match_documents`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        apikey: SUPABASE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query_embedding: embedding,
+        match_threshold: 0.5,
+        match_count: 5,
+        filter_category: null,
+      }),
+    }
+  );
+
+  const body = await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase Error (${response.status}): ${body.substring(0, 300)}`
+    );
+  }
+
+  const matches = JSON.parse(body);
+
+  return Array.isArray(matches) ? matches : [];
+}
+
+/* ===========================
+   END OF PART 1
+   PART 2 STARTS IMMEDIATELY BELOW THIS LINE
+=========================== */
+/* ============================================================================
+   GENERATE ANSWER (CEREBRAS → GROQ FALLBACK)
+============================================================================ */
+
+async function chat(
+  question: string,
+  excerpts: string[]
+): Promise<string> {
+  const system = `You are Pastor Gbayo, a warm, wise, compassionate spiritual leader of CCC Gbayo Parish.
+
+Your answers must:
+- Be biblically sound.
+- Be encouraging.
+- Be based primarily on the sermon excerpts below.
+- Never invent doctrine.
+- Quote Scripture where appropriate.
+
+SERMON EXCERPTS
+
+${excerpts.map((e, i) => `${i + 1}. ${e}`).join("\n\n")}
+`;
+
+  const messages = [
+    {
+      role: "system",
+      content: system,
+    },
+    {
+      role: "user",
+      content: question,
+    },
+  ];
+
+  /* =======================================================================
+     TRY CEREBRAS FIRST
+  ======================================================================= */
+
+  for (let i = 0; i < CEREBRAS_KEYS.length; i++) {
+    const key = CEREBRAS_KEYS[i];
+
+    try {
+      const response = await fetch(
+        "https://api.cerebras.ai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "llama3.1-8b",
+            messages,
+            temperature: 0.7,
+            max_tokens: 800,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const json = await response.json();
+
+        const answer = json?.choices?.[0]?.message?.content;
+
+        if (answer) {
+          return answer;
+        }
+      }
+
+      console.warn(
+        `Cerebras key ${i + 1} failed (${response.status})`
+      );
+    } catch (error) {
+      console.warn(`Cerebras key ${i + 1} error`, error);
+    }
+  }
+
+  /* =======================================================================
+     FALL BACK TO GROQ
+  ======================================================================= */
+
+  for (let i = 0; i < GROQ_KEYS.length; i++) {
+    const key = GROQ_KEYS[i];
+
+    try {
+      const response = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "llama-3.1-8b-instant",
+            messages,
+            temperature: 0.7,
+            max_tokens: 800,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const json = await response.json();
+
+        const answer = json?.choices?.[0]?.message?.content;
+
+        if (answer) {
+          return answer;
+        }
+      }
+
+      console.warn(
+        `Groq key ${i + 1} failed (${response.status})`
+      );
+    } catch (error) {
+      console.warn(`Groq key ${i + 1} error`, error);
+    }
+  }
+
+  /* =======================================================================
+     LAST RESORT MESSAGE
+  ======================================================================= */
+
+  return `Dear friend,
+
+I am experiencing a temporary technical difficulty and cannot search the sermon archive at the moment.
+
+Please try again shortly.
+
+May God strengthen you, guide you, and fill your heart with His peace.
+
+— Pastor Gbayo`;
+}
+
+/* ===========================
+   END OF PART 2
+   PART 3 STARTS IMMEDIATELY BELOW THIS LINE
+=========================== */
+/* ============================================================================
+   API ROUTE
+============================================================================ */
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+
+    const question = body?.question;
+
+    if (!question || typeof question !== "string") {
+      return NextResponse.json(
+        {
+          error: "Missing question",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    console.log("Question:", question);
+
+    /* ============================================================
+       STEP 1 - CREATE EMBEDDING
+    ============================================================ */
+
+    const embedding = await embed(question);
+
+    console.log("Embedding created.");
+
+    /* ============================================================
+       STEP 2 - SEARCH SUPABASE
+    ============================================================ */
+
+    const matches = await search(embedding);
+
+    console.log("Matches found:", matches.length);
+
+    /* ============================================================
+       STEP 3 - BUILD CONTEXT
+    ============================================================ */
+
+    const excerpts = matches
+      .map((m: any) => m.content)
+      .filter(Boolean);
+
+    /* ============================================================
+       STEP 4 - GENERATE ANSWER
+    ============================================================ */
+
+    const answer = await chat(question, excerpts);
+
+    /* ============================================================
+       STEP 5 - RETURN RESPONSE
+    ============================================================ */
+
+    return NextResponse.json({
+      success: true,
+      answer,
+      matches: matches.map((m: any) => ({
+        id: m.id,
+        source: m.source,
+        similarity: m.similarity,
+        content: m.content,
+      })),
+    });
+
+  } catch (error: unknown) {
+
+    console.error("Cele API Error:", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown server error";
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        answer:
+          "I am experiencing a technical difficulty right now. Please try again in a moment.\n\n— Pastor Gbayo",
+
+        matches: [],
+
+        error: message,
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}

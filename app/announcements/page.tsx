@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { announcements } from "@/data/announcements";
 import { PdfViewer } from "@/components/PdfViewer";
 
@@ -35,17 +34,6 @@ export default function AnnouncementsPage() {
               </time>
             </header>
 
-            {a.thumbnail && (
-              <figure className="mb-4 overflow-hidden rounded-xl">
-                <Image
-                  src={a.thumbnail}
-                  alt={`${a.title} thumbnail`}
-                  width={400}
-                  height={250}
-                  className="w-full h-auto object-cover"
-                />
-              </figure>
-            )}
 
             {a.pdfUrl && <PdfViewer pdfUrl={a.pdfUrl} title={a.title} />}
 
