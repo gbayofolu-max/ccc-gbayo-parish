@@ -1,223 +1,311 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { createRequire } from 'module';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ path: '.env.local' });
 
-// ======================
-// CONFIGURATION CONSTANTS
-// ======================
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const OLLAMA_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse-fork');
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-const IDENTITY = fs.existsSync('agents/folu-john-identity.json')
-  ? JSON.parse(fs.readFileSync('agents/folu-john-identity.json', 'utf8'))
-  : null;
+const JINA_KEYS: string[] = [];
+if (process.env.JINA_API_KEY) JINA_KEYS.push(process.env.JINA_API_KEY);
+for (let i = 2; i <= 10; i++) {
+  const k = process.env[`JINA_KEY_${i}`];
+  if (k) JINA_KEYS.push(k);
+}
+if (JINA_KEYS.length === 0) throw new Error('No Jina API key found in .env.local');
+console.log(`🔑 Loaded ${JINA_KEYS.length} Jina API key(s)`);
 
-// CRITICAL: These MUST be defined before any function that uses them
+let currentKeyIndex = 0;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const CATEGORY_MAP: Record<string, string> = {
-  'hymns': 'Hymn',
-  'legacy': 'Legacy',
-  'lessons': 'Lesson',
-  'sermons': 'Sermon',
-  'announcements': 'Announcement',
-  'pdfs': 'General'
+  hymns: 'Hymn',
+  legacy: 'Legacy',
+  lessons: 'Lesson',
+  sermons: 'Sermon',
+  announcements: 'Announcement',
+  pdfs: 'General',
+};
+
+const DB_CATEGORY_MAP: Record<string, string> = {
+  hymns: 'hymn',
+  legacy: 'legacy',
+  lessons: 'lesson',
+  sermons: 'sermon',
+  announcements: 'announcement',
+  pdfs: 'general',
 };
 
 const MINISTRY_VALUES: Record<string, string> = {
-  'hymns': 'reverence',
-  'legacy': 'tradition',
-  'lessons': 'teaching',
-  'sermons': 'kingdom',
-  'announcements': 'practical',
-  'pdfs': 'general'
+  hymns: 'reverence',
+  legacy: 'tradition',
+  lessons: 'teaching',
+  sermons: 'kingdom',
+  announcements: 'practical',
+  pdfs: 'general',
 };
 
-// ======================
-// HELPER FUNCTIONS
-// ======================
-/**
- * Get all PDF files in directory recursively
- */
+function pad1536(vec: number[]): number[] {
+  const padded = new Array(1536).fill(0);
+  for (let i = 0; i < vec.length && i < 1536; i++) padded[i] = vec[i];
+  return padded;
+}
+
+async function embedBatch(texts: string[]): Promise<number[][]> {
+  const maxFullCycles = 3;
+
+  for (let cycle = 0; cycle < maxFullCycles; cycle++) {
+    for (let attempt = 0; attempt < JINA_KEYS.length; attempt++) {
+      const key = JINA_KEYS[currentKeyIndex];
+      const keyLabel = `key #${currentKeyIndex + 1}`;
+
+      const res = await fetch('https://api.jina.ai/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'jina-embeddings-v3',
+          input: texts,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        return json.data.map((d: any) => pad1536(d.embedding as number[]));
+      }
+
+      const errText = await res.text();
+      console.log(`   ⚠️ Jina ${keyLabel} failed (status ${res.status}): ${errText.slice(0, 150)}`);
+      console.log(`   ↪ Rotating to next key...`);
+
+      currentKeyIndex = (currentKeyIndex + 1) % JINA_KEYS.length;
+    }
+
+    console.log(`   ⏳ All ${JINA_KEYS.length} Jina key(s) failed this pass — waiting 20s before retrying...`);
+    await sleep(20000);
+  }
+
+  throw new Error('All Jina keys failed after multiple retry cycles — check balances/rate limits on each');
+}
+
 function getPdfFiles(dir: string, all: string[] = []): string[] {
   if (!fs.existsSync(dir)) return all;
   for (const file of fs.readdirSync(dir)) {
     const f = path.join(dir, file);
-    if (fs.statSync(f).isDirectory()) {
-      getPdfFiles(f, all);
-    } else if (f.endsWith('.pdf')) {
-      all.push(f);
-    }
+    if (fs.statSync(f).isDirectory()) getPdfFiles(f, all);
+    else if (f.endsWith('.pdf')) all.push(f);
   }
   return all;
 }
 
-/**
- * Clean old "general" chunks from processed categories
- */
-async function cleanGeneralChunks() {
-  console.log('\n🧹 Cleaning old "general" chunks from processed categories...');
-  const categoriesToClean = ['Hymn', 'Sermon', 'Lesson', 'Legacy'];
-  
-  for (const category of categoriesToClean) {
-    const { error } = await supabase
-      .from('documents')
-      .delete()
-      .eq('category', category)
-      .eq('metadata->>ministry_value', 'general');
-    
-    if (error) {
-      console.warn(`⚠️ Cleanup warning for ${category}:`, error.message);
+function parseHymnChunks(text: string): { hymnNumber: number; content: string }[] {
+  const markerRegex = /^Hymn\s+(\d+)\s*$/gm;
+  const matches: { index: number; number: number }[] = [];
+  let m: RegExpExecArray | null;
+
+  while ((m = markerRegex.exec(text)) !== null) {
+    matches.push({ index: m.index, number: parseInt(m[1], 10) });
+  }
+
+  if (matches.length === 0) return [];
+
+  const grouped = new Map<number, string>();
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const chunkText = text.slice(start, end).trim();
+    const num = matches[i].number;
+    grouped.set(num, grouped.has(num) ? `${grouped.get(num)}\n\n${chunkText}` : chunkText);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([hymnNumber, content]) => ({ hymnNumber, content }))
+    .sort((a, b) => a.hymnNumber - b.hymnNumber);
+}
+
+let globalId = 1000000;
+
+async function embedAndInsertBatches(
+  contentChunks: string[],
+  referencesForChunk: (string | null)[],
+  dbCategory: string,
+  displayCategory: string,
+  fileName: string,
+  filePath: string,
+  ministryValue: string
+) {
+  const batchSize = 20;
+  let insertedTotal = 0;
+
+  for (let i = 0; i < contentChunks.length; i += batchSize) {
+    const batchTexts = contentChunks.slice(i, i + batchSize);
+    const batchRefs = referencesForChunk.slice(i, i + batchSize);
+
+    const batchEmbeds = await embedBatch(batchTexts);
+
+    const rows = batchTexts.map((content, j) => ({
+      id: globalId++,
+      content,
+      embedding: batchEmbeds[j],
+      category: dbCategory,
+      source: fileName,
+      reference: batchRefs[j],
+      metadata: {
+        source: filePath,
+        fileName,
+        category: displayCategory,
+        chunk_index: i + j,
+        ministry_value: ministryValue,
+      },
+    }));
+
+    const { error: insErr } = await supabase.from('documents').insert(rows);
+    if (insErr) {
+      console.error(`\n   ❌ Insert failed for this batch: ${insErr.message}`);
     } else {
-      console.log(`✅ Cleaned ${category} chunks with "general" ministry_value`);
+      insertedTotal += rows.length;
+    }
+
+    process.stdout.write(`   Embedded + saved ${Math.min(i + batchSize, contentChunks.length)}/${contentChunks.length}\r`);
+
+    if (i + batchSize < contentChunks.length) {
+      await sleep(2000);
     }
   }
+
+  console.log();
+  return insertedTotal;
 }
 
-/**
- * Safely update document by deleting existing then inserting new
- */
-async function upsertWithUpdate(doc: any) {
-  // Delete existing document with same content/source/fileName
-  await supabase
-    .from('documents')
-    .delete()
-    .eq('content', doc.content)
-    .eq('metadata->>source', doc.metadata.source)
-    .eq('metadata->>fileName', doc.metadata.fileName);
-  
-  return await supabase.from('documents').insert(doc);
-}
-
-/**
- * Get embeddings from Ollama with error handling
- */
-async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  const embeddings: number[][] = [];
-  
-  for (const text of texts) {
-    try {
-      const response = await fetch(`${OLLAMA_URL}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          model: 'nomic-embed-text', 
-          input: text 
-        }),
-      });
-      
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Ollama error ${response.status}: ${errText}`);
-      }
-      
-      const data = await response.json();
-      embeddings.push(data.embedding);
-    } catch (error: any) {
-      console.warn(`⚠️ Embedding skipped for chunk: ${error.message}`);
-      embeddings.push([]); // Push empty array as placeholder
-    }
-  }
-  
-  return embeddings;
-}
-
-// ======================
-// MAIN PROCESS
-// ======================
 async function main() {
-  console.log('\n🚀 Cele Ingestion: Full Clean & Re-Tag...\n');
+  console.log('\n🚀 Nehemiah PDF Ingestion (Jina v3 → 1536d)\n');
 
-  // Step 1: Clean existing incorrect ministry values
-  await cleanGeneralChunks();
-
-  // Step 2: Get PDF files
   const pdfPaths = getPdfFiles('public');
   if (pdfPaths.length === 0) {
-    console.log('⚠️ No PDFs found in public/ — stopping.');
+    console.log('⚠️ No PDFs found in public/');
     return;
   }
-  console.log(`🔎 Found ${pdfPaths.length} PDFs to process.\n`);
+  console.log(`🔎 Found ${pdfPaths.length} PDF(s)\n`);
 
-  // Step 3: Initialize PDF parser
-  const pdfParse = await import('pdf-parse-fork')
-    .then(m => m.default || m)
-    .catch(() => {
-      throw new Error('Failed to load pdf-parse-fork. Please install it.');
-    });
+  const { data: maxRow, error: maxErr } = await supabase
+    .from('documents')
+    .select('id')
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  // Step 4: Process each PDF
+  if (maxErr) console.warn(`⚠️ Could not read current max id: ${maxErr.message}`);
+  globalId = maxRow?.id ? maxRow.id + 1 : 1000000;
+
   for (const filePath of pdfPaths) {
-    try {
-      const fileName = path.basename(filePath);
-      const folder = path.basename(path.dirname(filePath));
-      
-      // Map folder to category and ministry value
-      const category = CATEGORY_MAP[folder] || 'General';
-      const ministryValue = MINISTRY_VALUES[folder] || 'general';
-      
-      console.log(`📄 ${fileName} → [${folder}] → ${category} + "${ministryValue}"`);
+    const fileName = path.basename(filePath);
+    const folder = path.basename(path.dirname(filePath));
+    const displayCategory = CATEGORY_MAP[folder] || 'General';
+    const dbCategory = DB_CATEGORY_MAP[folder] || 'general';
+    const ministryValue = MINISTRY_VALUES[folder] || 'general';
 
-      // Read and parse PDF
-      const dataBuffer = fs.readFileSync(filePath);
-      const data = await pdfParse(dataBuffer);
-      
-      if (!data.text?.trim()) {
-        console.warn(`  ⚠️ Empty or image-only — skipping`);
+    console.log(`📄 ${fileName} → [${folder}] → ${displayCategory}`);
+
+    const buffer = fs.readFileSync(filePath);
+    const data = await pdfParse(buffer);
+    const text: string = data.text?.trim() || '';
+
+    if (!text) {
+      console.warn(`  ⚠️ Empty PDF — skipped\n`);
+      continue;
+    }
+
+    if (folder === 'hymns') {
+      const hymnChunks = parseHymnChunks(text);
+      console.log(`   Detected hymn book — parsed ${hymnChunks.length} individual hymns`);
+
+      if (hymnChunks.length === 0) {
+        console.warn(`  ⚠️ No "Hymn N" markers found — skipping file\n`);
         continue;
       }
 
-      // Chunk text (1000 chars with 200 overlap)
-      const chunks: string[] = [];
-      let offset = 0;
-      while (offset < data.text.length) {
-        const chunk = data.text.substring(offset, offset + 1000);
-        chunks.push(chunk);
-        offset += Math.min(200, data.text.length - offset); // Safe overlap
-      }
-      
-      console.log(`   Split into ${chunks.length} chunks...`);
+      // Resumability: skip hymns already saved from a previous run
+      const { data: existingRows } = await supabase
+        .from('documents')
+        .select('reference')
+        .eq('category', 'hymn')
+        .eq('source', fileName);
 
-      // Get embeddings
-      const embeddings = await getEmbeddings(chunks);
-      
-      // Insert/update documents
-      for (let i = 0; i < chunks.length; i++) {
-        const embedding = embeddings[i];
-        
-        await upsertWithUpdate({
-          content: chunks[i],
-          metadata: {
-            source: filePath,
-            fileName,
-            category,
-            chunk_index: i,
-            tone: IDENTITY?.voice_style?.tone,
-            values: IDENTITY?.voice_style?.emphasize,
-            ministry_value: ministryValue,
-            source_profile: 'folu-john'
-          },
-          embedding: (embedding.length === 768 && embedding.some(v => typeof v === 'number')) 
-            ? embedding 
-            : null
-        });
+      const existingRefs = new Set((existingRows || []).map((r) => r.reference));
+      const remaining = hymnChunks.filter((h) => !existingRefs.has(`Hymn ${h.hymnNumber}`));
+
+      console.log(`   Already saved: ${existingRefs.size} — remaining to ingest: ${remaining.length}`);
+
+      if (remaining.length === 0) {
+        console.log(`   ✅ All hymns already ingested — skipping\n`);
+        continue;
       }
-      
-      console.log(`   ✅ Overwrote ${chunks.length} chunks\n`);
-    } catch (err: any) {
-      console.error(`❌ Error processing ${filePath}:`, err.message);
+
+      const contentChunks = remaining.map((h) => h.content);
+      const referencesForChunk = remaining.map((h) => `Hymn ${h.hymnNumber}`);
+
+      const inserted = await embedAndInsertBatches(
+        contentChunks,
+        referencesForChunk,
+        dbCategory,
+        displayCategory,
+        fileName,
+        filePath,
+        ministryValue
+      );
+
+      console.log(`   ✅ Inserted ${inserted} new hymn(s)\n`);
+      continue;
     }
+
+    // Non-hymn files: original delete-then-reinsert behavior
+    const { error: delErr } = await supabase
+      .from('documents')
+      .delete()
+      .eq('metadata->>source', filePath);
+
+    if (delErr) console.warn(`  ⚠️ Delete warning: ${delErr.message}`);
+
+    const contentChunks: string[] = [];
+    const referencesForChunk: (string | null)[] = [];
+    const stride = 800;
+    for (let i = 0; i < text.length; i += stride) {
+      contentChunks.push(text.slice(i, i + 1000));
+      referencesForChunk.push(null);
+    }
+
+    console.log(`   Split into ${contentChunks.length} chunk(s)`);
+
+    const inserted = await embedAndInsertBatches(
+      contentChunks,
+      referencesForChunk,
+      dbCategory,
+      displayCategory,
+      fileName,
+      filePath,
+      ministryValue
+    );
+
+    console.log(`   ✅ Inserted ${inserted} chunk(s)\n`);
   }
 
-  console.log('🏁 Ingestion complete! All ministry values are now accurate.\n');
+  console.log('🏁 Ingestion complete.\n');
 }
 
-// Run the process with top-level error handling
-main().catch(error => {
-  console.error('\n💥 Fatal error during ingestion:', error);
+main().catch((err) => {
+  console.error('\n💥 Fatal error:', err);
   process.exit(1);
 });

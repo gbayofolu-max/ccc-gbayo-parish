@@ -92,7 +92,7 @@ export const historyChapters: HistoryChapter[] = [
       "Like the disciples who left their nets to follow Christ, he chose obedience over comfort and purpose over personal ambition.",
     ],
     scriptures: ["Matthew 4:19-20", "Isaiah 6:8", "Acts 26:19"],
-    imageSrc: "/oshoffa.jpg",
+    imageSrc: "/rev-gbayo.jpg",
   },
   {
     id: 6,
@@ -107,7 +107,7 @@ export const historyChapters: HistoryChapter[] = [
       "His ministry emphasized both spiritual power and spiritual responsibility. He taught believers not only how to worship but how to live.",
     ],
     scriptures: ["John 10:11", "1 Peter 5:2-3", "Ezekiel 34:11-12"],
-    imageSrc: "/jesus.jpg",
+    imageSrc: "/rev-gbayo.jpg",
   },
   {
     id: 7,
@@ -139,7 +139,7 @@ export const historyChapters: HistoryChapter[] = [
       "His leadership reflected the words of Christ: 'The good shepherd giveth his life for the sheep.' — John 10:11",
     ],
     scriptures: ["John 10:11", "Galatians 6:2", "Romans 12:15"],
-    imageSrc: "/oshoffa.jpg",
+    imageSrc: "/rev-gbayo.jpg",
   },
   {
     id: 9,
@@ -157,7 +157,7 @@ export const historyChapters: HistoryChapter[] = [
       "The incident remains one of the clearest demonstrations of his selflessness and love.",
     ],
     scriptures: ["Philippians 2:3-4", "1 Thessalonians 5:17", "James 5:16"],
-    imageSrc: "/jesus.jpg",
+    imageSrc: "/rev-gbayo.jpg",
   },
   {
     id: 10,
@@ -174,7 +174,7 @@ export const historyChapters: HistoryChapter[] = [
       "To many present, it felt like a heavenly affirmation of a life faithfully lived.",
     ],
     scriptures: ["2 Timothy 4:7-8", "Revelation 21:4", "Philippians 1:21"],
-    imageSrc: "/oshoffa.jpg",
+    imageSrc: "/rev-gbayo.jpg",
   },
   {
     id: 11,
@@ -188,6 +188,6 @@ export const historyChapters: HistoryChapter[] = [
       "The mission remains unchanged: To proclaim Christ. To teach truth without compromise. To depend on the Holy Spirit. To love all people. To prepare souls for Heaven.",
     ],
     scriptures: ["2 Timothy 4:7", "Hebrews 12:1-2", "Matthew 28:19-20"],
-    imageSrc: "/rev-gbayo.jpg",
+    imageSrc: "/mother/mother-celestial.jpg",
   },
 ];

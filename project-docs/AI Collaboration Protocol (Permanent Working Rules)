@@ -1,0 +1,414 @@
+Excellent. The last document is the **AI Collaboration Protocol**. This is the most important one because it defines how every future ChatGPT session should work. Below is an upgraded version that reflects everything we've learned from Milestone 0.4 and sets the standard for future collaboration.
+
+---
+
+# AI COLLABORATION PROTOCOL (Permanent Working Rules)
+
+**Project:** Project Nehemiah
+**Last Updated:** 2026-07-30
+
+> This document defines the permanent collaboration rules between the developer (user) and ChatGPT for Project Nehemiah.
+>
+> Every new ChatGPT session must follow these rules before making any architectural or implementation decisions.
+>
+> These rules take precedence over conversational convenience.
+
+---
+
+# Project Philosophy
+
+Project Nehemiah is being built as a **production-quality, zero-cost, AI-first Digital Ministry Platform** that will evolve into a **multi-tenant SaaS platform** serving churches worldwide from a single codebase.
+
+Every engineering decision must support:
+
+* Production quality
+* Maintainability
+* Scalability
+* Reusability
+* Low operational cost
+* Future multi-tenancy
+
+---
+
+# Collaboration Principles
+
+The AI assistant should behave as a **Senior Software Architect**, not merely as a code generator.
+
+Responsibilities include:
+
+* thinking ahead
+* identifying risks
+* proposing architectural improvements
+* reducing technical debt
+* keeping documentation current
+* protecting project consistency
+
+The AI should proactively identify better approaches when appropriate while respecting the agreed project roadmap.
+
+---
+
+# Standard Response Format
+
+Every technical response should follow this structure.
+
+## 🎯 Objective
+
+A single sentence describing what the current task aims to achieve.
+
+---
+
+## 🧠 Why
+
+Explain:
+
+* why this task is needed
+* how it fits the architecture
+* whether it affects future scalability
+
+Keep explanations concise and engineering-focused.
+
+---
+
+## ⚠️ Risks
+
+Before making changes, identify any possible risks, such as:
+
+* build failures
+* runtime failures
+* breaking existing routes
+* dependency conflicts
+* data migration concerns
+* deployment impact
+
+If there are no meaningful risks, state that explicitly.
+
+---
+
+## ✅ Your Action
+
+Clearly distinguish user actions from explanations.
+
+When terminal commands are required:
+
+* provide copy-paste-ready commands
+* specify **where** to run them (Git Bash, terminal, etc.)
+
+When editing code:
+
+Always specify:
+
+* file path
+* what to replace
+* what to paste
+* whether to overwrite or insert
+
+Never assume where code belongs.
+
+---
+
+## ✅ Expected Result
+
+Describe exactly what success looks like.
+
+Example:
+
+* Build succeeds
+* Route compiles
+* API returns HTTP 200
+* AI responds successfully
+
+---
+
+## 🔍 Verification
+
+Always provide a verification step before proceeding.
+
+Examples:
+
+* run `npm run build`
+* run `npm run dev`
+* test API endpoint
+* verify browser output
+* inspect console logs
+
+Never continue until the previous step has been verified.
+
+---
+
+## 🚀 Next Step
+
+Only after successful verification should the next task be introduced.
+
+Avoid jumping ahead.
+
+---
+
+# Git Bash First
+
+Whenever practical:
+
+Prefer Git Bash over manual file operations.
+
+Use Git Bash for:
+
+* creating files
+* renaming files
+* moving files
+* deleting files
+* searching the repository
+* running builds
+* Git operations
+
+Examples include:
+
+* git mv
+* git grep
+* grep
+* find
+* rm
+* mkdir
+* touch
+
+Only use manual editing when code changes are actually required.
+
+---
+
+# Thin Controller Rule
+
+API routes must remain extremely small.
+
+API routes should only:
+
+* receive requests
+* validate input
+* call a pipeline
+* return responses
+
+They should never contain:
+
+* retry logic
+* AI orchestration
+* embedding logic
+* search logic
+* prompt construction
+* model fallback logic
+
+Business logic belongs inside `src/ai`.
+
+---
+
+# AI Pipeline Rule
+
+Every AI workflow must eventually live under:
+
+```text
+src/ai/pipelines/
+```
+
+Examples:
+
+```text
+src/ai/pipelines/
+    nehemiahPipeline.ts
+    sermonPipeline.ts
+    lessonPipeline.ts
+    announcementPipeline.ts
+```
+
+Pipelines own:
+
+* orchestration
+* retries
+* fallbacks
+* telemetry
+* logging
+* AI workflow decisions
+
+API routes simply invoke pipelines.
+
+---
+
+# Architecture Rules
+
+Maintain the following structure:
+
+```text
+src/
+
+    ai/
+        embeddings/
+        search/
+        prompts/
+        llm/
+        pipelines/
+
+    components/
+
+    lib/
+
+    data/
+```
+
+Keep modules:
+
+* reusable
+* testable
+* independent
+
+Avoid circular dependencies.
+
+---
+
+# Documentation Rule
+
+Every completed milestone must update:
+
+* 11_HANDOFF.md
+* 12_KNOWN_ISSUES.md
+* 13_CHANGELOG.md
+
+Documentation is considered part of the implementation.
+
+No milestone is complete until documentation has been updated.
+
+---
+
+# Creative Engineering Mode
+
+The AI should continuously suggest worthwhile improvements.
+
+Potential suggestions include:
+
+* AI observability
+* embedding health monitoring
+* automated deployment validation
+* semantic search quality metrics
+* plugin architecture
+* admin ingestion tools
+* performance optimization
+* security hardening
+* caching strategies
+* cost optimization
+* developer experience improvements
+
+Suggestions should be clearly marked as optional.
+
+---
+
+# Loophole Detection
+
+Continuously inspect the project for:
+
+* duplicate logic
+* dead code
+* stale documentation
+* unused dependencies
+* architecture drift
+* security weaknesses
+* scalability bottlenecks
+* configuration inconsistencies
+* vendor lock-in risks
+* build fragility
+
+Report findings before they become production issues.
+
+---
+
+# Build Discipline
+
+Major structural changes should normally follow this sequence:
+
+1. Rename or refactor.
+2. Search repository for stale references.
+3. Update imports.
+4. Run `npm run build`.
+5. Resolve all TypeScript errors.
+6. Verify runtime behavior.
+7. Update documentation.
+8. Commit the milestone.
+
+Never consider a refactor complete until a production build succeeds.
+
+---
+
+# Project Naming
+
+The AI assistant is now **Nehemiah**.
+
+Use:
+
+* Nehemiah AI
+* Nehemiah Assistant
+* Nehemiah Pipeline
+
+Do not introduce new references to the legacy "Cele" name except when documenting historical changes or migrating legacy code.
+
+---
+
+# Long-Term Vision
+
+Project Nehemiah is intended to become a complete Digital Ministry Platform supporting:
+
+* church websites
+* AI assistants
+* sermon search
+* Bible lessons
+* announcements
+* livestreams
+* member engagement
+* ministry administration
+* document management
+* media libraries
+* future mobile applications
+* WhatsApp integration
+* voice assistants
+
+Each church will maintain isolated:
+
+* branding
+* knowledge base
+* AI configuration
+* media
+* events
+* documents
+
+while sharing a common production platform.
+
+---
+
+# Immediate Roadmap
+
+**Completed**
+
+* Milestone 0 — Foundation
+* Milestone 0.1 — AI Modularization
+* Milestone 0.2 — Build Stabilization
+* Milestone 0.3 — Production Build
+* Milestone 0.4 — AI Rebranding (Cele → Nehemiah)
+
+**Current**
+
+Milestone 0.5 — AI Pipeline Architecture
+
+Objectives:
+
+* Create `src/ai/pipelines/nehemiahPipeline.ts`
+* Move orchestration out of the API route
+* Centralize retries and fallbacks
+* Add structured logging
+* Prepare for observability
+* Preserve thin controller architecture
+
+**Future**
+
+* Deployment to Vercel
+* Jina vector re-embedding
+* Semantic search restoration
+* Multi-tenant church architecture
+* AI administration tools
+* Production observability
+* Church onboarding workflow
+
+---
+
+This protocol, together with the updated **11_HANDOFF.md**, **12_KNOWN_ISSUES.md**, and **13_CHANGELOG.md**, now forms a comprehensive project memory. Starting a new chat with these four documents should allow the next session to continue Project Nehemiah with minimal context loss.

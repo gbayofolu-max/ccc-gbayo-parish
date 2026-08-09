@@ -1,93 +1,46 @@
-/* --------------------------------------------------------------- */
-/*  Google‑font import – Cormorant Garamond + Inter               */
-/* --------------------------------------------------------------- */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
 
 /* --------------------------------------------------------------- */
-/*  Tailwind directives – must stay in this order                  */
+/*  Design tokens — single source of truth for color & type        */
 /* --------------------------------------------------------------- */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@theme {
+  --font-serif: "Cormorant Garamond", "Merriweather", serif;
+  --font-sans: "Inter", sans-serif;
 
-/* --------------------------------------------------------------- */
-/*  Custom Theme Colors (Gold & Blue Branding)                    */
-/* --------------------------------------------------------------- */
-@layer base {
-  :root {
-    --color-gold: #F5C518;
-    --color-dark-gold: #D4A017;
-    --color-blue-950: #0a1628;
-    --color-blue-900: #0d2137;
-    --color-blue-800: #1a3a5c;
-  }
-}
+  --color-navy: #0a1628;
+  --color-navy-mid: #0d2137;
+  --color-navy-light: #1a3a5c;
+  --color-gold: #f5c518;
+  --color-dark-gold: #d4a017;
 
-@layer utilities {
-  /* Gold colors */
-  .text-gold {
-    color: #F5C518;
-  }
-  .bg-gold {
-    background-color: #F5C518;
-  }
-  .border-gold {
-    border-color: #F5C518;
-  }
-  
-  /* Dark gold colors */
-  .text-dark-gold {
-    color: #D4A017;
-  }
-  .bg-dark-gold {
-    background-color: #D4A017;
-  }
-  .border-dark-gold {
-    border-color: #D4A017;
-  }
-  
-  /* Blue colors */
-  .text-blue-950 {
-    color: #0a1628;
-  }
-  .bg-blue-950 {
-    background-color: #0a1628;
-  }
-  .text-blue-900 {
-    color: #0d2137;
-  }
-  .bg-blue-900 {
-    background-color: #0d2137;
-  }
+  --shadow-glow: 0 0 15px rgba(245, 197, 24, 0.6);
 }
 
 /* --------------------------------------------------------------- */
 /*  Base styles                                                   */
 /* --------------------------------------------------------------- */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
 html {
   scroll-behavior: smooth;
 }
 
-/*  Background – deep navy gradient  */
 body {
   background: linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a1628 100%);
   min-height: 100vh;
   color: #ffffff;
-  font-family: 'Inter', sans-serif;
 }
 
-/*  Heading font  */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Cormorant Garamond', serif;
+  font-family: var(--font-serif);
 }
 
-/*  Custom scrollbar – gold accent  */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* --------------------------------------------------------------- */
+/*  Custom scrollbar — gold accent                                 */
+/* --------------------------------------------------------------- */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -95,32 +48,55 @@ h1, h2, h3, h4, h5, h6 {
   background: #0a1628;
 }
 ::-webkit-scrollbar-thumb {
-  background: #F5C518;
+  background: #f5c518;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #D4A017;
+  background: #d4a017;
 }
 
 /* --------------------------------------------------------------- */
-/*  Hero Text Shadows                                             */
+/*  Hero text shadows                                              */
 /* --------------------------------------------------------------- */
 .hero-heading-shadow {
-  text-shadow: 
+  text-shadow:
     0 2px 4px rgba(0, 0, 0, 0.8),
     0 4px 8px rgba(0, 0, 0, 0.6),
     0 8px 16px rgba(0, 0, 0, 0.4);
 }
 
 .hero-gold-shadow {
-  text-shadow: 
+  text-shadow:
     0 2px 4px rgba(0, 0, 0, 0.9),
     0 4px 8px rgba(0, 0, 0, 0.7),
     0 0 20px rgba(245, 197, 24, 0.3);
 }
 
 .hero-verse-shadow {
-  text-shadow: 
+  text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.8),
     0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* --------------------------------------------------------------- */
+/*  Motion                                                         */
+/* --------------------------------------------------------------- */
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+.animate-gentle-float {
+  animation: gentle-float 4s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------- */
+/*  Mobile menu safety net (kept as backup; should be unnecessary  */
+/*  once content-scanning is fixed, but harmless to leave in)      */
+/* --------------------------------------------------------------- */
+@media (min-width: 1024px) {
+  .mobile-menu-hamburger,
+  .mobile-menu-overlay,
+  .mobile-menu-sidebar {
+    display: none !important;
+  }
 }

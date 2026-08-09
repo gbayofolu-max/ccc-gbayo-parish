@@ -19,41 +19,37 @@ export default function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
+    document.body.style.overflow = isOpen ? 'hidden' : 'unset';
   }, [isOpen]);
 
   return (
     <>
-      {/* VISIBLE HAMBURGER BUTTON */}
+      {/* Hamburger */}
       <button
-        className="ml-2 p-2 rounded-full bg-gold/20 text-gold hover:bg-gold hover:text-navy transition-all active:scale-90 focus:outline-none shadow-sm border border-gold/30"
+        className="mobile-menu-hamburger lg:hidden p-2 rounded-full bg-gold/20 text-gold hover:bg-gold hover:text-navy transition-all active:scale-90 focus:outline-none shadow-sm border border-gold/30"
         onClick={() => setIsOpen(true)}
         aria-label="Open navigation menu"
       >
         <Bars3Icon className="h-7 w-7" />
       </button>
 
-      {/* DARK OVERLAY */}
+      {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-[60] bg-navy/80 backdrop-blur-sm transition-opacity duration-300"
+          className="mobile-menu-overlay lg:hidden fixed inset-0 z-[60] bg-navy/80 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         />
       )}
 
-      {/* SIDEBAR MENU */}
+      {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-[70] h-full w-80 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`mobile-menu-sidebar lg:hidden fixed top-0 right-0 z-[70] h-full w-72 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between p-6 border-b border-gold/20 bg-gradient-to-r from-navy to-navy-mid">
-          <div className="flex flex-col">
-            <h2 className="text-2xl font-serif font-bold text-gold">CCC GBAYO</h2>
+        <div className="flex items-center justify-between p-5 border-b border-gold/20 bg-gradient-to-r from-navy to-navy-mid">
+          <div>
+            <h2 className="text-xl font-serif font-bold text-gold">CCC GBAYO</h2>
             <span className="text-white/70 text-xs italic">Digital Sanctuary</span>
           </div>
           <button
@@ -64,7 +60,7 @@ export default function MobileMenu() {
           </button>
         </div>
 
-        <nav className="mt-4 px-4 space-y-1 overflow-y-auto h-[calc(100vh-100px)]">
+        <nav className="mt-2 px-3 space-y-1">
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -77,8 +73,10 @@ export default function MobileMenu() {
           ))}
         </nav>
 
-        <div className="absolute bottom-8 left-0 w-full px-6 text-center">
-           <p className="text-[10px] text-gray-400 uppercase tracking-widest">© {new Date().getFullYear()} CCC Gbayo Parish</p>
+        <div className="absolute bottom-6 left-0 w-full px-6 text-center">
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest">
+            © {new Date().getFullYear()} CCC Gbayo Parish
+          </p>
         </div>
       </aside>
     </>

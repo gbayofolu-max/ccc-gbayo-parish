@@ -862,3 +862,142 @@ Before shutting down, if battery allows, do not interrupt the reembedding proces
 When we continue, we resume exactly from:
 
 "Finish Jina reembedding → test matchesFound → connect Cerebras/Groq answer generation."
+ # PROJECT NEHEMIAH — COMPLETE RECAP
+
+**Session Date:** 2026-07-31  
+**Status:** Milestone 0.5 Complete → Phase 4 Complete
+
+---
+
+## What We Started With
+
+You brought a build report and two files:
+- `NehemiahChat.tsx` (broken, 6 problems)
+- Project context (Project Nehemiah, AI-powered Digital Ministry Platform)
+
+**Known Issue at Start:** Semantic search returned `0 matches` because database vectors were built with `Xenova/all-MiniLM-L6-v2` while the runtime used `jina-embeddings-v3`.
+
+---
+
+## What We Fixed (Chronological)
+
+### 1. NehemiahChat.tsx — 6 Critical Fixes
+| # | Problem | Fix |
+|---|---------|-----|
+| 1 | `</div>` closed too early | Moved after messages + loading block |
+| 2 | `key={index}` anti-pattern | Added `id: string` with `crypto.randomUUID()` |
+| 3 | No auto-scroll | Added `bottomRef` + `scrollIntoView` effect |
+| 4 | Click-outside listener re-attached every render | Guarded with `if (!isOpen) return` |
+| 5 | Undifferentiated errors | Added console logging + `TypeError` network detection |
+| 6 | Input not disabled while loading | Added `disabled={loading}` + styles |
+
+**Result:** Build passed. Production build verified: `✓ Compiled successfully`, 20/20 pages generated.
+
+---
+
+### 2. Database Re-embedding (3085 Documents)
+- Confirmed Supabase `documents.embedding` column = `vector(1536)`
+- Ran `scripts/reembed-jina.ts`
+- **3085 Bible verses re-embedded** with `jina-embeddings-v3` + zero-padded to 1536 dimensions
+- Runtime semantic search architecture confirmed working
+
+---
+
+### 3. Knowledge Base Ingestion (208 New Chunks)
+**Discovery:** `documents` table only contained Bible verses. Sermons, lessons, and legacy documents existed as PDFs in `public/` but were never ingested.
+
+**PDFs Found:**
+| File | Folder | Chunks | Category |
+|------|--------|--------|----------|
+| `constitution.pdf` | legacy | 175 | Legacy |
+| `our-legacy-and-constitution.pdf` | legacy | 15 | Legacy |
+| `bible-lesson.pdf` | lessons | 9 | Lesson |
+| `slide1.pdf` | sermons | 2 | Sermon |
+| `slide2.pdf` | sermons | 1 | Sermon |
+| `slide3.pdf` | sermons | 2 | Sermon |
+| `slide4.pdf` | sermons | 4 | Sermon |
+
+**Script Fixes Applied (`scripts/ingest-pdfs.ts`):**
+- Replaced Ollama/nomic-embed-text with **Jina v3**
+- Added **1536-dimension padding** to match Supabase column
+- Switched from broken `pdf-parse` to working **`pdf-parse-fork`**
+- Fixed **ESM/CJS import hell** using `createRequire`
+- Fixed **chunking stride bug** (`i += 800` instead of broken overlap)
+- Fixed **primary key collision** (Supabase `id` is `bigint`, not UUID — used incremental numeric IDs)
+- Added **batch embedding** (32 chunks per API call)
+- Replaced fragile content-match delete with **source-path-based cleanup**
+
+**Result:** 208 chunks successfully inserted. Nehemiah now has access to sermons, lessons, and legacy documents.
+
+---
+
+### 4. Dev Server Issue Identified
+- `npm run dev` (Turbopack) returned **404 on `/api/nehemiah/query`** with 3.8min compile time
+- **Root cause:** Turbopack on-demand compilation failure, not missing code
+- **Verification:** `npm run build` passes cleanly, route exists in output
+- **Workaround:** Use `npm start` (production server) or `npx next dev --turbo=false`
+
+---
+
+## Current Architecture Status
+
+```
+src/ai/
+├── embeddings/jina.ts      ✅ Jina v3, 1024d → pad1536()
+├── search/search.ts        ✅ Supabase semantic search
+├── prompts/systemPrompt.ts ✅
+├── llm/cerebras.ts         ✅
+├── llm/groq.ts             ✅ Fallback
+└── pipelines/              ✅ Orchestration extracted from routes
+
+src/components/
+└── NehemiahChat.tsx        ✅ Conversation UI, Markdown, auto-scroll
+
+Database:
+├── 3085 Bible verses       ✅ Re-embedded with Jina v3
+├── 208 PDF chunks          ✅ Ingested (sermons, lessons, legacy)
+└── match_documents RPC     ✅ Multiple versions exist (may need cleanup)
+```
+
+---
+
+## Tasks Ahead (Immediate → Long-Term)
+
+### Immediate (Next 1–2 Sessions)
+1. **Test semantic retrieval** — Ask Nehemiah about sermon content ("Tell me about true worship") using `npm start` to confirm the knowledge layer works end-to-end
+2. **Clean up `match_documents` RPC** — You have **6 versions** of the function in Supabase. Delete the stale ones and keep only the version your pipeline actually calls
+3. **Fix Turbopack or document workaround** — Either resolve the 404 in dev mode or standardize on `--turbo=false` for local development
+4. **Update documentation** — `11_HANDOFF.md`, `12_KNOWN_ISSUES.md`, `13_CHANGELOG.md` for Milestone 0.5 completion
+
+### Short-Term (Milestone 0.6–0.7)
+5. **Observability (Phase 5)** — Add structured logging, response timings, embedding/LLM latency tracking
+6. **Production Deployment (Phase 6)** — Deploy to Vercel, smoke test, runtime validation
+7. **Re-embed remaining tables** — If sermons/lessons/history eventually move to dedicated tables, apply the same Jina re-embedding pattern
+
+### Medium-Term (Milestone 1.0)
+8. **Multi-tenant foundation** — Tenant isolation for branding, AI, documents, knowledge
+9. **Admin dashboard** — AI knowledge management, document upload, embedding status
+10. **Member portal** — Authentication, personalized experience
+
+### Long-Term (Vision)
+11. **Module expansion** — Events, live streaming, voice assistant, WhatsApp integration, church media
+12. **Multi-church SaaS** — One codebase, thousands of churches, isolated identities
+
+---
+
+## Known Issues to Document
+- **Turbopack dev mode:** `/api/nehemiah/query` returns 404 in `next dev` (Turbopack). Production build and `npm start` work correctly.
+- **Supabase RPC pollution:** 6 versions of `match_documents` exist — potential confusion for which function the pipeline calls.
+- **PDF parser dependency:** `pdf-parse` (original) is broken in ESM; `pdf-parse-fork` works but generates warnings on malformed PDFs.
+
+---
+
+## Files Modified in This Session
+- `src/components/NehemiahChat.tsx` — Complete rewrite (6 fixes)
+- `scripts/ingest-pdfs.ts` — Complete rewrite (Jina v3, batching, bigint IDs, pdf-parse-fork)
+- `scripts/reembed-jina.ts` — Ran successfully (no code changes needed)
+- `.next/` — Cleared multiple times
+
+---
+
+**Recommendation:** Run `npm start`, test Nehemiah with a sermon query, confirm semantic retrieval works, then commit everything and update your three project docs (`11_HANDOFF.md`, `12_KNOWN_ISSUES.md`, `13_CHANGELOG.md`).

@@ -1,5 +1,12 @@
+interface SearchOptions {
+  matchThreshold?: number;
+  matchCount?: number;
+  filterCategory?: string | null;
+}
+
 export async function searchDocuments(
-  embedding: number[]
+  embedding: number[],
+  options: SearchOptions = {}
 ) {
   const SUPABASE_URL =
     process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,6 +20,12 @@ export async function searchDocuments(
     );
   }
 
+  const {
+    matchThreshold = 0.5,
+    matchCount = 5,
+    filterCategory = null,
+  } = options;
+
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/rpc/match_documents`,
     {
@@ -24,9 +37,9 @@ export async function searchDocuments(
       },
       body: JSON.stringify({
         query_embedding: embedding,
-        match_threshold: 0.5,
-        match_count: 5,
-        filter_category: null,
+        match_threshold: matchThreshold,
+        match_count: matchCount,
+        filter_category: filterCategory,
       }),
     }
   );
@@ -47,4 +60,4 @@ export async function searchDocuments(
   return Array.isArray(matches)
     ? matches
     : [];
-} 
+}

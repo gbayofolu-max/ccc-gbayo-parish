@@ -11,49 +11,72 @@ export async function askGroq(
     process.env.GROQ_KEY_6,
   ].filter(Boolean) as string[];
 
+
   for (let i = 0; i < keys.length; i++) {
+
     const key = keys[i];
 
     try {
+
+      console.log(`Trying Groq key #${i + 1}`);
+
+
       const response = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
+
           headers: {
             Authorization: `Bearer ${key}`,
             "Content-Type": "application/json",
           },
+
           body: JSON.stringify({
-            model: "llama-3.1-8b-instant",
+            model: "openai/gpt-oss-120b",
             messages,
             temperature: 0.7,
-            max_tokens: 800,
+            max_tokens: 1024,
           }),
         }
       );
 
-      if (response.ok) {
-        const json = await response.json();
 
-        const answer =
-          json?.choices?.[0]?.message?.content;
+      if (!response.ok) {
 
-        if (answer) {
-          return answer;
-        }
+        const errorText = await response.text();
+
+        console.warn(
+          `Groq key #${i + 1} failed: ${response.status}`,
+          errorText.substring(0, 200)
+        );
+
+        continue;
       }
 
-      console.warn(
-        `Groq key ${i + 1} failed (${response.status})`
-      );
+
+      const json = await response.json();
+
+
+      const answer =
+        json?.choices?.[0]?.message?.content;
+
+
+      if (answer) {
+        return answer;
+      }
+
 
     } catch (error) {
+
       console.warn(
-        `Groq key ${i + 1} error`,
+        `Groq key #${i + 1} error`,
         error
       );
+
     }
+
   }
+
 
   return null;
 }

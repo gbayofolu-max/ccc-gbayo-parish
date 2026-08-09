@@ -40,7 +40,7 @@ export default function ChapterPage() {
             src={chapter.imageSrc} 
             alt={chapter.title} 
             fill 
-            className="object-cover" 
+            className="object-cover object-top" 
           />
           <div className="absolute inset-0 bg-gradient-to-t from-navy via-transparent to-transparent" />
         </div>

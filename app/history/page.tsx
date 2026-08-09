@@ -54,7 +54,7 @@ export default function HistoryPage() {
               src={chapter.imageSrc} 
               alt={chapter.title} 
               fill 
-              className="object-cover w-full h-full"
+              className="object-cover object-top w-full h-full"
               priority
             />
             <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
