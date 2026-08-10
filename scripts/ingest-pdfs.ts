@@ -112,16 +112,13 @@ function getPdfFiles(dir: string, all: string[] = []): string[] {
 }
 
 function parseHymnChunks(text: string): { hymnNumber: number; content: string }[] {
-  const markerRegex = /^Hymn\s+(\d+)\s*$/gm;
+  const markerRegex = /^(?:Hymn|Orin)\s*(\d+)/gm;
   const matches: { index: number; number: number }[] = [];
   let m: RegExpExecArray | null;
-
   while ((m = markerRegex.exec(text)) !== null) {
     matches.push({ index: m.index, number: parseInt(m[1], 10) });
   }
-
   if (matches.length === 0) return [];
-
   const grouped = new Map<number, string>();
   for (let i = 0; i < matches.length; i++) {
     const start = matches[i].index;
@@ -130,7 +127,6 @@ function parseHymnChunks(text: string): { hymnNumber: number; content: string }[
     const num = matches[i].number;
     grouped.set(num, grouped.has(num) ? `${grouped.get(num)}\n\n${chunkText}` : chunkText);
   }
-
   return Array.from(grouped.entries())
     .map(([hymnNumber, content]) => ({ hymnNumber, content }))
     .sort((a, b) => a.hymnNumber - b.hymnNumber);
@@ -237,7 +233,6 @@ async function main() {
         continue;
       }
 
-      // Resumability: skip hymns already saved from a previous run
       const { data: existingRows } = await supabase
         .from('documents')
         .select('reference')
@@ -271,7 +266,6 @@ async function main() {
       continue;
     }
 
-    // Non-hymn files: original delete-then-reinsert behavior
     const { error: delErr } = await supabase
       .from('documents')
       .delete()
