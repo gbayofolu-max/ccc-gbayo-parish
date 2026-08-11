@@ -39,6 +39,21 @@ async function tryExactHymnLookup(question: string) {
 }
 
 
+// TEMPORARY MITIGATION: the `documents` table's scripture rows are corrupted
+// (see project notes — only 5 distinct verse bodies exist across ~30,205 rows,
+// each duplicated under thousands of wrong references). match_documents()
+// doesn't return `category`, so we detect scripture rows via metadata.book,
+// which is unique to category='scripture' (verified via a per-category key
+// audit). Strip them out of BOTH the primary and fallback search results so
+// Nehemiah never quotes known-bad verse text as a "relevant excerpt" — this
+// means direct scripture Q&A will get no excerpts and fall back to the LLM's
+// general knowledge until the real fix lands. Remove this filter once the
+// verse table is re-ingested from a clean KJV source and confirmed correct.
+function stripCorruptedScripture(docs: any[]): any[] {
+  return docs.filter((doc) => !(doc?.metadata && doc.metadata.book));
+}
+
+
 export async function nehemiahPipeline(
   input: NehemiahPipelineInput
 ) {
@@ -86,6 +101,7 @@ export async function nehemiahPipeline(
       const searchStart = Date.now();
 
       documents = await searchDocuments(embedding);
+      documents = stripCorruptedScripture(documents);
 
       usedFallbackSearch = false;
 
@@ -95,6 +111,7 @@ export async function nehemiahPipeline(
           matchThreshold: -1,
           matchCount: 3,
         });
+        documents = stripCorruptedScripture(documents);
       }
 
       searchMs = Date.now() - searchStart;

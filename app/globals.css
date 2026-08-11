@@ -6,36 +6,41 @@
 @theme {
   --font-serif: "Cormorant Garamond", "Merriweather", serif;
   --font-sans: "Inter", sans-serif;
-
   --color-navy: #0a1628;
   --color-navy-mid: #0d2137;
   --color-navy-light: #1a3a5c;
   --color-gold: #f5c518;
   --color-dark-gold: #d4a017;
-
   --shadow-glow: 0 0 15px rgba(245, 197, 24, 0.6);
 }
 
 /* --------------------------------------------------------------- */
-/*  Base styles                                                   */
+/*  Base styles                                                    */
 /* --------------------------------------------------------------- */
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  background: linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a1628 100%);
-  min-height: 100vh;
-  color: #ffffff;
-}
-
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-serif);
-}
-
-a {
-  text-decoration: none;
-  color: inherit;
+/* Wrapped in @layer base: Tailwind v4 puts its own utility classes
+   (.text-navy, etc.) inside @layer utilities. CSS cascade-layer rules
+   say ANY unlayered CSS beats ANY layered CSS regardless of selector
+   specificity — so this "a { color: inherit }" rule was silently
+   overriding every text-color utility on every <a> tag site-wide
+   (this is what caused the mobile nav menu text to render invisible).
+   Placing it in @layer base restores normal specificity rules against
+   Tailwind's utilities layer, which is declared after base. */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    background: linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a1628 100%);
+    min-height: 100vh;
+    color: #ffffff;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+  }
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
 }
 
 /* --------------------------------------------------------------- */
@@ -56,7 +61,7 @@ a {
 }
 
 /* --------------------------------------------------------------- */
-/*  Hero text shadows                                              */
+/*  Hero text shadows                                               */
 /* --------------------------------------------------------------- */
 .hero-heading-shadow {
   text-shadow:
@@ -64,14 +69,12 @@ a {
     0 4px 8px rgba(0, 0, 0, 0.6),
     0 8px 16px rgba(0, 0, 0, 0.4);
 }
-
 .hero-gold-shadow {
   text-shadow:
     0 2px 4px rgba(0, 0, 0, 0.9),
     0 4px 8px rgba(0, 0, 0, 0.7),
     0 0 20px rgba(245, 197, 24, 0.3);
 }
-
 .hero-verse-shadow {
   text-shadow:
     0 1px 3px rgba(0, 0, 0, 0.8),
