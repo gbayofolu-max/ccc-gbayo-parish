@@ -1,3 +1,18 @@
+async function fetchWithTimeout(
+  url: string,
+  options: any,
+  timeoutMs = 8000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
 export async function askGroq(
   messages: any[]
 ): Promise<string | null> {
@@ -21,7 +36,7 @@ export async function askGroq(
       console.log(`Trying Groq key #${i + 1}`);
 
 
-      const response = await fetch(
+      const response = await fetchWithTimeout(
         "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
@@ -35,7 +50,7 @@ export async function askGroq(
             model: "openai/gpt-oss-120b",
             messages,
             temperature: 0.7,
-            max_tokens: 1024,
+            max_tokens: 2048,
           }),
         }
       );
@@ -69,7 +84,7 @@ export async function askGroq(
     } catch (error) {
 
       console.warn(
-        `Groq key #${i + 1} error`,
+        `Groq key #${i + 1} error (or timed out)`,
         error
       );
 

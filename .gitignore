@@ -52,3 +52,5 @@ tsconfig.tsbuildinfo
 
 # TypeScript build cache
 tsconfig.tsbuildinfo
+data/ebible-yor/
+data/kjv-gutenberg-raw.txt

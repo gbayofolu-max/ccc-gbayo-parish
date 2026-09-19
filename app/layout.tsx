@@ -40,6 +40,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </Link>
               <div className="hidden lg:flex items-center gap-6 xl:gap-8">
                 <NavLink href="/">Home</NavLink>
+                <NavLink href="/live">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                    Live
+                  </span>
+                </NavLink>
                 <NavLink href="/history">History</NavLink>
                 <NavLink href="/events">Events</NavLink>
                 <NavLink href="/announcements">Announcements</NavLink>

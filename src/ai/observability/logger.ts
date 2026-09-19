@@ -6,7 +6,7 @@ interface PipelineLogEntry {
   searchMs?: number;
   matchesCount?: number;
   usedFallbackSearch?: boolean;
-  llmProvider?: "cerebras" | "groq";
+  llmProvider?: "cerebras" | "groq" | "gemini";
   llmMs?: number;
   totalMs: number;
   status: "success" | "error";

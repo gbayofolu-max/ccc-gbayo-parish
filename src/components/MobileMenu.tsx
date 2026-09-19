@@ -6,6 +6,7 @@ import { XMarkIcon, Bars3Icon } from '@heroicons/react/24/outline';
 
 const navLinks = [
   { name: 'Home', href: '/' },
+  { name: 'Live', href: '/live' },
   { name: 'History', href: '/history' },
   { name: 'Events', href: '/events' },
   { name: 'Announcements', href: '/announcements' },
@@ -66,8 +67,11 @@ export default function MobileMenu() {
               key={link.href}
               href={link.href}
               onClick={() => setIsOpen(false)}
-              className="flex items-center px-4 py-3 text-navy hover:bg-gold/20 hover:text-navy font-serif font-medium rounded-xl transition-all text-lg border-b border-gray-50"
+              className="flex items-center gap-2 px-4 py-3 text-navy hover:bg-gold/20 hover:text-navy font-serif font-medium rounded-xl transition-all text-lg border-b border-gray-50"
             >
+              {link.href === '/live' && (
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              )}
               {link.name}
             </Link>
           ))}

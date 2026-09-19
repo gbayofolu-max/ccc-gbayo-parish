@@ -1,6 +1,7 @@
 interface Excerpt {
   content: string;
   reference: string | null;
+  source?: string;
 }
 
 export function createSystemPrompt(
@@ -24,12 +25,26 @@ Your answer must:
 `;
   }
 
+  const isScripture = (source?: string) => source === "KJV Bible" || source === "Yoruba Bible";
+
   const excerptBlock = excerpts
     .map((e, i) => {
-      const label = e.reference ? ` (${e.reference})` : "";
+      const label = e.reference ? ` (${e.reference}${e.source ? ", " + e.source : ""})` : "";
       return `${i + 1}.${label} ${e.content}`;
     })
     .join("\n\n");
+
+  const hasScripture = excerpts.some((e) => isScripture(e.source));
+  const hasBothLanguages =
+    excerpts.some((e) => e.source === "KJV Bible") && excerpts.some((e) => e.source === "Yoruba Bible");
+
+  const scriptureGuidance = hasScripture
+    ? `\n\nAny excerpt labeled "KJV Bible" or "Yoruba Bible" is the exact, verified text of Scripture as it appears in the church's Bible database — not a paraphrase. Quote it word for word, exactly as given, when answering. Do not alter, summarize, or "correct" the wording of these excerpts.${
+        hasBothLanguages
+          ? ` Both an English (KJV) and a Yoruba version of this passage are provided. If the person's question is written in Yoruba, answer using the Yoruba excerpt. Otherwise, default to the English (KJV) excerpt, but feel free to also offer the Yoruba version if it seems helpful.`
+          : ``
+      }`
+    : ``;
 
   const confidenceNote = lowConfidence
     ? `\nNote: these excerpts are loosely related, not a strong direct match to the question. Use them as inspiration rather than as if they directly answer the question. Do not force a connection that isn't really there.`
@@ -41,12 +56,12 @@ ${baseIdentity}
 Your answers must:
 - Be biblically sound.
 - Be encouraging.
-- Be based primarily on the sermon excerpts provided.
+- Be based primarily on the excerpts provided below.
 - Never invent doctrine.
-- Quote Scripture where appropriate, citing the reference given.
+- Quote Scripture exactly where it is given, citing the reference.${scriptureGuidance}
 ${confidenceNote}
 
-SERMON EXCERPTS
+EXCERPTS
 
 ${excerptBlock}
 `;
