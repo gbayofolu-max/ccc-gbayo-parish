@@ -6,9 +6,11 @@ export default function ShareButton({ title, url }: { title: string; url: string
   const [copied, setCopied] = useState(false);
 
   async function handleShare() {
-    if (typeof navigator !== "undefined" && "share" in navigator) {
+    const nav = navigator as any;
+
+    if (nav && typeof nav.share === "function") {
       try {
-        await navigator.share({ title, url });
+        await nav.share({ title, url });
       } catch {
         // Person cancelled the native share sheet — nothing to do.
       }
@@ -16,7 +18,7 @@ export default function ShareButton({ title, url }: { title: string; url: string
     }
 
     try {
-      await navigator.clipboard.writeText(url);
+      await nav.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
