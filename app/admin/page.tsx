@@ -1,26 +1,62 @@
-// src/app/admin/page.tsx
-export default function AdminDashboard() {
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createSupabaseServerClient } from "@/lib/supabase/server-auth";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import LogoutButton from "@/components/admin/LogoutButton";
+
+export default async function AdminDashboardPage() {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/admin/login");
+  }
+
+  const { data: adminRow } = await supabaseAdmin
+    .from("admin_users")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const role = adminRow?.role ?? "unknown";
+
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-serif font-bold text-navy mb-6">Admin Dashboard</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow border border-emerald-100">
-          <h2 className="font-bold text-gold mb-2">📌 Quick Links</h2>
-          <ul className="space-y-2 text-navy">
-            <li><a href="/admin/sermons" className="underline hover:text-emerald-600">Manage Sermons</a></li>
-            <li><a href="/admin/announcements" className="underline hover:text-emerald-600">Announcements</a></li>
-            <li><a href="/admin/events" className="underline hover:text-emerald-600">Events</a></li>
-          </ul>
+    <main className="min-h-screen bg-slate-50 px-6 py-10">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="font-serif text-3xl font-bold text-navy">Admin Dashboard</h1>
+            <p className="text-sm text-navy-light/70">
+              Signed in as {user.email} &middot; role: {role}
+            </p>
+          </div>
+          <LogoutButton />
         </div>
-        <div className="bg-emerald-50 p-4 rounded-lg">
-          <p className="text-emerald-800 italic">
-            “Whatever you do, work at it with all your heart, as working for the Lord.” — Colossians 3:23
-          </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link
+            href="/presentation/control"
+            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <h2 className="font-serif text-lg font-bold text-navy">Presentation Control</h2>
+            <p className="mt-1 text-sm text-navy-light/70">
+              Control what's shown on the projector — hymns, scripture, announcements.
+            </p>
+          </Link>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 opacity-60 shadow-sm">
+            <h2 className="font-serif text-lg font-bold text-navy">Sermon Automation</h2>
+            <p className="mt-1 text-sm text-navy-light/70">Coming soon.</p>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 opacity-60 shadow-sm">
+            <h2 className="font-serif text-lg font-bold text-navy">Church Settings</h2>
+            <p className="mt-1 text-sm text-navy-light/70">Coming soon.</p>
+          </div>
         </div>
       </div>
-      <p className="mt-6 text-gray-500 text-sm">
-        Note: Admin features are coming soon. For now, use the nav links above.
-      </p>
-    </div>
+    </main>
   );
 }
