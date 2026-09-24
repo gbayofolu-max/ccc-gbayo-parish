@@ -46,10 +46,15 @@ export default async function AdminDashboardPage() {
             </p>
           </Link>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 opacity-60 shadow-sm">
+          <Link
+            href="/admin/sermons/new"
+            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+          >
             <h2 className="font-serif text-lg font-bold text-navy">Sermon Automation</h2>
-            <p className="mt-1 text-sm text-navy-light/70">Coming soon.</p>
-          </div>
+            <p className="mt-1 text-sm text-navy-light/70">
+              Upload a sermon and let Nehemiah draft daily posts for review.
+            </p>
+          </Link>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-6 opacity-60 shadow-sm">
             <h2 className="font-serif text-lg font-bold text-navy">Church Settings</h2>
