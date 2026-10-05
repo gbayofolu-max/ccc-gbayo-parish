@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 
 type Tab = "verse" | "hymn" | "custom";
 
@@ -18,10 +18,51 @@ interface LookupResult {
   verses: VerseRow[] | null;
 }
 
-const VERSES_PER_PAGE = 3;
 
 const inputClass =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-navy placeholder:text-gray-400 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold";
+
+function fontFamilyStyle(fontFamily: string): string {
+  switch (fontFamily) {
+    case "modern":
+      return "Arial, Helvetica, sans-serif";
+    case "humanist":
+      return '"Trebuchet MS", Arial, sans-serif';
+    case "readable":
+      return "Verdana, Geneva, sans-serif";
+    case "classic":
+    default:
+      return 'Georgia, "Times New Roman", serif';
+  }
+}
+
+function fontSizeClass(fontSize: string): string {
+  switch (fontSize) {
+    case "compact":
+      return "text-4xl md:text-5xl lg:text-6xl";
+    case "standard":
+      return "text-5xl md:text-6xl lg:text-7xl";
+    case "large":
+      return "text-5xl md:text-7xl lg:text-8xl";
+    case "giant":
+      return "text-6xl md:text-8xl lg:text-9xl";
+    case "extra-large":
+    default:
+      return "text-5xl md:text-6xl lg:text-8xl";
+  }
+}
+
+function lineSpacingClass(lineSpacing: string): string {
+  switch (lineSpacing) {
+    case "tight":
+      return "leading-tight";
+    case "spacious":
+      return "leading-loose";
+    case "normal":
+    default:
+      return "leading-snug";
+  }
+}
 
 export default function PresentationControlPage() {
   const [tab, setTab] = useState<Tab>("verse");
@@ -38,26 +79,18 @@ export default function PresentationControlPage() {
   const [customBody, setCustomBody] = useState("");
 
   const [result, setResult] = useState<LookupResult | null>(null);
-  const [pageIndex, setPageIndex] = useState(0);
   const [status, setStatus] = useState<string>("");
   const [shown, setShown] = useState(false);
 
-  const pages: VerseRow[][] = useMemo(() => {
-    if (!result?.verses || result.verses.length === 0) return [];
-    const chunks: VerseRow[][] = [];
-    for (let i = 0; i < result.verses.length; i += VERSES_PER_PAGE) {
-      chunks.push(result.verses.slice(i, i + VERSES_PER_PAGE));
-    }
-    return chunks;
-  }, [result]);
+  const [fontFamily, setFontFamily] = useState("classic");
+  const [fontSize, setFontSize] = useState("extra-large");
+  const [lineSpacing, setLineSpacing] = useState("normal");
+  const [autoFit, setAutoFit] = useState(false);
 
-  const isPaginated = pages.length > 0;
-  const currentPageVerses = isPaginated ? pages[pageIndex] : null;
 
   function switchTab(next: Tab) {
     setTab(next);
     setResult(null);
-    setPageIndex(0);
     setShown(false);
     setStatus("");
   }
@@ -68,6 +101,10 @@ export default function PresentationControlPage() {
     body_text: string;
     reference: string | null;
     language: string | null;
+    font_family: string;
+    font_size: string;
+    line_spacing: string;
+    auto_fit: boolean;
   }) {
     setStatus("Sending to screen...");
     try {
@@ -107,8 +144,7 @@ export default function PresentationControlPage() {
         return;
       }
       setResult(data);
-      setPageIndex(0);
-      setStatus("");
+        setStatus("");
     } catch {
       setStatus("Network error — try again.");
     }
@@ -134,8 +170,7 @@ export default function PresentationControlPage() {
         return;
       }
       setResult(data);
-      setPageIndex(0);
-      setStatus("");
+        setStatus("");
     } catch {
       setStatus("Network error — try again.");
     }
@@ -154,7 +189,6 @@ export default function PresentationControlPage() {
       language: null,
       verses: null,
     });
-    setPageIndex(0);
     setShown(false);
     setStatus("");
   }
@@ -162,43 +196,17 @@ export default function PresentationControlPage() {
   function handleShow() {
     if (!result) return;
 
-    if (isPaginated && currentPageVerses) {
-      const pageText = currentPageVerses.map((v) => `${v.verse}. ${v.text}`).join(" ");
-      const pageLabel =
-        pages.length > 1
-          ? `${result.title} (${pageIndex + 1} of ${pages.length})`
-          : result.title;
-      pushToScreen({
-        content_type: "verse",
-        title: pageLabel,
-        body_text: pageText,
-        reference: result.reference,
-        language: result.language,
-      });
-    } else {
-      pushToScreen({
-        content_type: result.content_type,
-        title: result.title,
-        body_text: result.body_text ?? "",
-        reference: result.reference,
-        language: result.language,
-      });
-    }
-  }
-
-  function goToPage(newIndex: number) {
-    setPageIndex(newIndex);
-    if (shown && result && pages[newIndex]) {
-      const pageText = pages[newIndex].map((v) => `${v.verse}. ${v.text}`).join(" ");
-      const pageLabel = `${result.title} (${newIndex + 1} of ${pages.length})`;
-      pushToScreen({
-        content_type: "verse",
-        title: pageLabel,
-        body_text: pageText,
-        reference: result.reference,
-        language: result.language,
-      });
-    }
+    pushToScreen({
+      content_type: result.content_type,
+      title: result.title,
+      body_text: result.body_text ?? "",
+      reference: result.reference,
+      language: result.language,
+      font_family: fontFamily,
+      font_size: fontSize,
+      line_spacing: lineSpacing,
+      auto_fit: autoFit,
+    });
   }
 
   async function handleClear() {
@@ -224,9 +232,7 @@ export default function PresentationControlPage() {
       active ? "bg-navy text-gold" : "bg-white text-navy border border-navy/20"
     }`;
 
-  const previewBodyText = isPaginated && currentPageVerses
-    ? currentPageVerses.map((v) => `${v.verse}. ${v.text}`).join(" ")
-    : result?.body_text ?? "";
+  const previewBodyText = result?.body_text ?? "";
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -300,8 +306,7 @@ export default function PresentationControlPage() {
                   </div>
                 </div>
                 <p className="text-xs text-navy-light/60">
-                  Leave verse fields empty to load the whole chapter — it will be split into
-                  {" "}{VERSES_PER_PAGE}-verse pages you can step through with Next/Previous.
+                  Leave verse fields empty to load and display the whole chapter as one continuous passage.
                 </p>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-navy-light/70">
@@ -391,6 +396,116 @@ export default function PresentationControlPage() {
               </div>
             )}
 
+            <div className="mt-6 space-y-5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div>
+                <h2 className="font-serif text-xl font-bold text-navy">Presentation Appearance</h2>
+                <p className="mt-1 text-xs text-navy-light/60">
+                  These settings apply to the projector screen.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-navy-light/70">
+                  Font
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ["classic", "Classic"],
+                    ["modern", "Modern"],
+                    ["humanist", "Humanist"],
+                    ["readable", "Readable"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFontFamily(value)}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                        fontFamily === value
+                          ? "bg-navy text-gold"
+                          : "bg-gray-100 text-navy"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-navy-light/70">
+                  Text Size
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ["compact", "Compact"],
+                    ["standard", "Standard"],
+                    ["large", "Large"],
+                    ["extra-large", "Extra Large"],
+                    ["giant", "Giant"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setFontSize(value)}
+                      className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                        fontSize === value
+                          ? "bg-navy text-gold"
+                          : "bg-gray-100 text-navy"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-navy-light/70">
+                  Line Spacing
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    ["tight", "Tight"],
+                    ["normal", "Normal"],
+                    ["spacious", "Spacious"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setLineSpacing(value)}
+                      className={`rounded-lg px-2 py-2 text-sm font-semibold ${
+                        lineSpacing === value
+                          ? "bg-navy text-gold"
+                          : "bg-gray-100 text-navy"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
+                <span>
+                  <span className="block text-sm font-semibold text-navy">Auto-fit</span>
+                  <span className="block text-xs text-navy-light/60">
+                    Allow the projector to adjust sizing when necessary.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={autoFit}
+                  onChange={(e) => setAutoFit(e.target.checked)}
+                  className="h-5 w-5 accent-navy"
+                />
+              </label>
+
+              <p className="text-xs text-navy-light/60">
+                Auto-fit is off by default, so your selected size will not secretly shrink
+                for long Bible chapters.
+              </p>
+            </div>
+
             {status && <p className="mt-4 text-sm text-navy-light">{status}</p>}
           </div>
 
@@ -400,14 +515,12 @@ export default function PresentationControlPage() {
                 {result.title && (
                   <div className="mb-3 font-serif text-xl font-bold text-gold">
                     {result.title}
-                    {isPaginated && pages.length > 1 && (
-                      <span className="ml-2 text-sm font-normal text-gold/60">
-                        ({pageIndex + 1} of {pages.length})
-                      </span>
-                    )}
                   </div>
                 )}
-                <div className="font-serif text-lg leading-relaxed text-white">
+                <div
+                  className={`${fontSizeClass(fontSize)} ${lineSpacingClass(lineSpacing)} text-white`}
+                  style={{ fontFamily: fontFamilyStyle(fontFamily) }}
+                >
                   {previewBodyText}
                 </div>
                 {result.language && (
@@ -416,24 +529,6 @@ export default function PresentationControlPage() {
                   </div>
                 )}
 
-                {isPaginated && pages.length > 1 && (
-                  <div className="mt-5 flex gap-2">
-                    <button
-                      onClick={() => goToPage(Math.max(0, pageIndex - 1))}
-                      disabled={pageIndex === 0}
-                      className="flex-1 rounded-lg border border-gold/40 px-3 py-2 text-sm font-semibold text-gold disabled:opacity-30"
-                    >
-                      ← Previous
-                    </button>
-                    <button
-                      onClick={() => goToPage(Math.min(pages.length - 1, pageIndex + 1))}
-                      disabled={pageIndex === pages.length - 1}
-                      className="flex-1 rounded-lg border border-gold/40 px-3 py-2 text-sm font-semibold text-gold disabled:opacity-30"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                )}
 
                 <button
                   onClick={handleShow}

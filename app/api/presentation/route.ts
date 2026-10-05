@@ -24,6 +24,10 @@ export async function POST(req: NextRequest) {
     body_text = null,
     reference = null,
     language = null,
+    font_family = "classic",
+    font_size = "extra-large",
+    line_spacing = "normal",
+    auto_fit = false,
   } = body;
 
   const { data, error } = await supabaseAdmin
@@ -34,6 +38,10 @@ export async function POST(req: NextRequest) {
       body_text,
       reference,
       language,
+      font_family,
+      font_size,
+      line_spacing,
+      auto_fit,
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1)

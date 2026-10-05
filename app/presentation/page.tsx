@@ -8,16 +8,52 @@ interface PresentationState {
   body_text: string | null;
   reference: string | null;
   language: string | null;
+  font_family: string | null;
+  font_size: string | null;
+  line_spacing: string | null;
+  auto_fit: boolean | null;
 }
 
-// Longer passages need a smaller (but still large) font so they fit
-// without shrinking into illegibility; short verses get the full
-// large size. Thresholds are on character count of the body text.
-function fontSizeClassFor(text: string | null): string {
-  const len = text?.length ?? 0;
-  if (len > 700) return "text-3xl md:text-4xl";
-  if (len > 400) return "text-4xl md:text-5xl";
-  return "text-5xl md:text-6xl";
+function fontFamilyStyle(fontFamily: string | null): string {
+  switch (fontFamily) {
+    case "modern":
+      return "Arial, Helvetica, sans-serif";
+    case "humanist":
+      return '"Trebuchet MS", Arial, sans-serif';
+    case "readable":
+      return "Verdana, Geneva, sans-serif";
+    case "classic":
+    default:
+      return 'Georgia, "Times New Roman", serif';
+  }
+}
+
+function fontSizeClass(fontSize: string | null): string {
+  switch (fontSize) {
+    case "compact":
+      return "text-4xl md:text-5xl lg:text-6xl";
+    case "standard":
+      return "text-5xl md:text-6xl lg:text-7xl";
+    case "large":
+      return "text-5xl md:text-7xl lg:text-8xl";
+    case "giant":
+      return "text-6xl md:text-8xl lg:text-9xl";
+    case "extra-large":
+    default:
+      return "text-5xl md:text-6xl lg:text-8xl";
+  }
+}
+
+function lineSpacingClass(lineSpacing: string | null): string {
+  switch (lineSpacing) {
+    case "tight":
+      return "leading-tight";
+    case "spacious":
+      return "leading-loose";
+    case "normal":
+    default:
+      return "leading-snug";
+  }
 }
 
 export default function PresentationPage() {
@@ -46,7 +82,9 @@ export default function PresentationPage() {
   }, []);
 
   const isBlank = !state || state.content_type === "blank";
-  const fontSizeClass = fontSizeClassFor(state?.body_text ?? null);
+  const fontFamily = fontFamilyStyle(state?.font_family ?? "classic");
+  const fontSize = fontSizeClass(state?.font_size ?? "extra-large");
+  const lineSpacing = lineSpacingClass(state?.line_spacing ?? "normal");
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center justify-center bg-navy px-10 py-10 text-center md:px-20">
@@ -62,8 +100,11 @@ export default function PresentationPage() {
 
           {state?.body_text && (
             <div
-              className={`font-serif ${fontSizeClass} leading-snug text-white`}
-              style={{ textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}
+              className={`${fontSize} ${lineSpacing} text-white`}
+              style={{
+                fontFamily,
+                textShadow: "0 2px 10px rgba(0,0,0,0.5)",
+              }}
             >
               {state.body_text}
             </div>

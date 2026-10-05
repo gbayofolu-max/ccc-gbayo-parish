@@ -47,6 +47,16 @@ export default async function AdminDashboardPage() {
           </Link>
 
           <Link
+            href="/admin/hymns"
+            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <h2 className="font-serif text-lg font-bold text-navy">Hymn Editor</h2>
+            <p className="mt-1 text-sm text-navy-light/70">
+              Correct Yoruba and English hymn text without changing the hymn number.
+            </p>
+          </Link>
+
+          <Link
             href="/admin/sermons/new"
             className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
           >

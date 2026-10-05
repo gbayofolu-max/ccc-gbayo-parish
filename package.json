@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "ingest": "tsx scripts/ingest-pdfs.ts"
+    "lint": "eslint"
   },
   "dependencies": {
     "@fullcalendar/daygrid": "^6.1.21",

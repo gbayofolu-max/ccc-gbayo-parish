@@ -54,3 +54,6 @@ tsconfig.tsbuildinfo
 tsconfig.tsbuildinfo
 data/ebible-yor/
 data/kjv-gutenberg-raw.txt
+
+.vercel
+.env*
