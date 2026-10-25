@@ -74,6 +74,7 @@ export default function PresentationControlPage() {
   const [language, setLanguage] = useState<"english" | "yoruba">("english");
 
   const [hymnNumber, setHymnNumber] = useState("");
+  const [hymnLanguage, setHymnLanguage] = useState<"both" | "yoruba" | "english">("both");
 
   const [customTitle, setCustomTitle] = useState("");
   const [customBody, setCustomBody] = useState("");
@@ -161,7 +162,7 @@ export default function PresentationControlPage() {
       const res = await fetch("/api/presentation/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "hymn", number: hymnNumber }),
+        body: JSON.stringify({ type: "hymn", number: hymnNumber, language: hymnLanguage }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -353,6 +354,24 @@ export default function PresentationControlPage() {
                     onChange={(e) => setHymnNumber(e.target.value)}
                   />
                 </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-navy-light/70">
+                    Show
+                  </label>
+                  <div className="flex gap-2">
+                    {(["both", "yoruba", "english"] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => setHymnLanguage(opt)}
+                        className={`rounded-lg px-3 py-2 text-sm ${
+                          hymnLanguage === opt ? "bg-navy text-gold" : "bg-gray-100 text-navy"
+                        }`}
+                      >
+                        {opt === "both" ? "Both" : opt === "yoruba" ? "Yorùbá" : "English"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <button
                   onClick={handlePreviewHymn}
                   className="w-full rounded-lg bg-gold px-4 py-2 font-semibold text-navy"
@@ -518,7 +537,7 @@ export default function PresentationControlPage() {
                   </div>
                 )}
                 <div
-                  className={`${fontSizeClass(fontSize)} ${lineSpacingClass(lineSpacing)} text-white`}
+                  className={`${fontSizeClass(fontSize)} ${lineSpacingClass(lineSpacing)} whitespace-pre-line text-white`}
                   style={{ fontFamily: fontFamilyStyle(fontFamily) }}
                 >
                   {previewBodyText}

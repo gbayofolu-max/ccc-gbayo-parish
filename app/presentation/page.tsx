@@ -100,7 +100,7 @@ export default function PresentationPage() {
 
           {state?.body_text && (
             <div
-              className={`${fontSize} ${lineSpacing} text-white`}
+              className={`${fontSize} ${lineSpacing} whitespace-pre-line text-white`}
               style={{
                 fontFamily,
                 textShadow: "0 2px 10px rgba(0,0,0,0.5)",

@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from("documents")
-      .select("content, reference")
+      .select("content, reference, metadata")
       .eq("category", "hymn")
       .eq("reference", `Hymn ${hymnNumber}`)
       .maybeSingle();
@@ -52,12 +52,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Hymn not found" }, { status: 404 });
     }
 
+    // Yoruba / English / both. Rows without separate fields are split only when they clearly hold two blocks.
+    const meta = (data.metadata ?? {}) as { yoruba?: string; english?: string };
+    let yo = typeof meta.yoruba === "string" ? meta.yoruba : null;
+    let en = typeof meta.english === "string" ? meta.english : null;
+    if (!yo || !en) {
+      const parts = String(data.content).trim().split(/\n\s*\n/);
+      if (parts.length === 2) {
+        yo = parts[0].trim();
+        en = parts[1].trim();
+      }
+    }
+    const choice = body.language === "yoruba" || body.language === "english" ? body.language : "both";
+    const hymnText: { text: string; label: string | null } = { text: data.content, label: null };
+    if (yo && en) {
+      if (choice === "yoruba") {
+        hymnText.text = yo;
+        hymnText.label = "Yorùbá";
+      } else if (choice === "english") {
+        hymnText.text = en;
+        hymnText.label = "English";
+      } else {
+        hymnText.text = `${yo}\n\n${en}`;
+      }
+    }
+
     return NextResponse.json({
       content_type: "hymn",
       title: data.reference,
-      body_text: data.content,
+      body_text: hymnText.text,
       reference: data.reference,
-      language: null,
+      language: hymnText.label,
       verses: null,
     });
   }
