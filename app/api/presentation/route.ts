@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { requireRole } from "@/lib/auth/roles";
 
 export async function GET() {
   const { data, error } = await supabaseAdmin
@@ -16,6 +17,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Only a signed-in admin or operator may change what is on the projector.
+  const access = await requireRole(["admin", "operator"]);
+  if (!access.ok) {
+    return NextResponse.json({ error: access.error }, { status: access.status });
+  }
+
   const body = await req.json();
 
   const {

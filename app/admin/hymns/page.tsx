@@ -107,13 +107,21 @@ export default function HymnEditorPage() {
         throw new Error(data.error || "Unable to load hymn.");
       }
 
-      const parts = splitHymnContent(data.content);
+      const fallback = splitHymnContent(data.content);
+      const parts = {
+        yoruba: typeof data.yoruba === "string" ? data.yoruba : fallback.yoruba,
+        english: typeof data.english === "string" ? data.english : fallback.english,
+      };
 
       setLoadedNumber(data.hymn_number);
       setYoruba(parts.yoruba);
       setEnglish(parts.english);
       setHistory(data.history ?? []);
-      setMessage(`Hymn ${data.hymn_number} loaded.`);
+      setMessage(
+        data.needs_review
+          ? `Hymn ${data.hymn_number} loaded. The Yoruba / English split was guessed for this hymn, so please check both boxes before saving.`
+          : `Hymn ${data.hymn_number} loaded.`
+      );
     } catch (err) {
       setLoadedNumber(null);
       setYoruba("");
@@ -142,8 +150,6 @@ export default function HymnEditorPage() {
       return;
     }
 
-    const content = `${yoruba}\n\n${english}`;
-
     setSaving(true);
 
     try {
@@ -152,7 +158,7 @@ export default function HymnEditorPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ yoruba, english }),
       });
 
       const data = await res.json();
