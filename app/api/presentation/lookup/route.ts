@@ -83,6 +83,7 @@ export async function POST(req: NextRequest) {
       body_text: hymnText.text,
       reference: data.reference,
       language: hymnText.label,
+      parts: yo && en ? { yoruba: yo, english: en } : null,
       verses: null,
     });
   }
