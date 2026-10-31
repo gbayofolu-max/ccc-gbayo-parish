@@ -75,6 +75,16 @@ export default async function AdminDashboardPage() {
               Church details, who can sign in, and database health.
             </p>
           </Link>
+
+          <Link
+            href="/admin/visitors"
+            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <h2 className="font-serif text-lg font-bold text-navy">Visitor Report</h2>
+            <p className="mt-1 text-sm text-navy-light/70">
+              How many people visit the website: daily, weekly and monthly.
+            </p>
+          </Link>
         </div>
       </div>
     </main>

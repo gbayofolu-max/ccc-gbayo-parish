@@ -6,6 +6,7 @@ import Link from "next/link";
 import Footer from "@/components/Footer";
 import MobileMenu from "@/components/MobileMenu";
 import NehemiahChatGate from "@/components/NehemiahChatGate";
+import VisitTracker from "@/components/VisitTracker";
 
 export const metadata = {
   title: "CCC Gbayo Parish – Celestial Church of Christ, Ikorodu",
@@ -76,6 +77,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <main className="flex-grow">{children}</main>
         <Footer />
         <NehemiahChatGate />
+        <VisitTracker />
       </body>
     </html>
   );
