@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useAutoMode } from "@/lib/voice/useAutoMode";
+import AutoPanel from "@/components/presentation/AutoPanel";
 
 type Tab = "verse" | "hymn" | "custom";
 type HymnLanguage = "both" | "yoruba" | "english";
@@ -198,12 +200,18 @@ function ScreenPreview(props: {
     el.style.fontSize = `${basePx}px`;
     const limit = 720 * (props.title ? 0.72 : 0.84);
 
-    if (props.autoFit) {
-      for (let s = 1; s >= 0.3; s -= 0.05) {
+    if (props.autoFit && el.scrollHeight > limit) {
+      // Auto-fit only trims a little. Long passages keep the chosen size and scroll on the projector.
+      let fitted = false;
+      for (let s = 0.95; s >= 0.7; s -= 0.05) {
         el.style.fontSize = `${basePx * s}px`;
-        if (el.scrollHeight <= limit) break;
+        if (el.scrollHeight <= limit) {
+          fitted = true;
+          break;
+        }
       }
-      setOverflow(false);
+      if (!fitted) el.style.fontSize = `${basePx}px`;
+      setOverflow(!fitted);
     } else {
       setOverflow(el.scrollHeight > limit);
     }
@@ -238,7 +246,7 @@ function ScreenPreview(props: {
       </div>
       {overflow && (
         <p className="mt-2 text-xs font-semibold text-red-600">
-          This will not fit on the screen. Turn on Auto-fit, choose a smaller text size, or use one verse or stanza at a time.
+          Long text: the projector keeps this size and scrolls it. Use Auto mode (it follows the reading) or the Scroll buttons.
         </p>
       )}
     </div>
@@ -396,7 +404,8 @@ export default function PresentationControlPage() {
 
   async function lookupVerse(
     parts: { book: string; chapter: string; verseStart: string; verseEnd: string },
-    show: boolean
+    show: boolean,
+    lang?: "english" | "yoruba"
   ) {
     if (!parts.book.trim() || !parts.chapter.trim()) {
       setStatus("Enter at least a book and chapter.");
@@ -407,7 +416,7 @@ export default function PresentationControlPage() {
       const res = await fetch("/api/presentation/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "verse", ...parts, language }),
+        body: JSON.stringify({ type: "verse", ...parts, language: lang ?? language }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -557,6 +566,45 @@ export default function PresentationControlPage() {
       .catch(() => setStatus(`Display link: ${link}`));
   }
 
+  const voice = useAutoMode({
+    showVerse: (cmd) => {
+      if (cmd.language) setLanguage(cmd.language);
+      setTab("verse");
+      setBook(cmd.book);
+      setChapter(cmd.chapter);
+      setVerseStart(cmd.verseStart);
+      setVerseEnd(cmd.verseEnd);
+      lookupVerse(
+        { book: cmd.book, chapter: cmd.chapter, verseStart: cmd.verseStart, verseEnd: cmd.verseEnd },
+        true,
+        cmd.language
+      );
+    },
+    showHymn: (cmd) => {
+      const lang: HymnLanguage = cmd.language ?? hymnLanguage;
+      setHymnLanguage(lang);
+      setTab("hymn");
+      setHymnNumber(cmd.number);
+      lookupHymn(cmd.number, lang, true);
+    },
+    next: () => goTo(slideIndex + 1),
+    previous: () => goTo(slideIndex - 1),
+    blank: () => blankScreen(),
+    switchLanguage: (lang) => {
+      if (result?.content_type === "hymn") {
+        changeHymnLanguage(lang);
+      } else if (result?.content_type === "verse" && book && chapter) {
+        setLanguage(lang);
+        lookupVerse({ book, chapter, verseStart, verseEnd }, isLive, lang);
+      }
+    },
+    // What is on the projector right now, so the read-along follows the right text.
+    getPassage: () => {
+      const onScreen = liveIndex !== null ? slides[liveIndex] : null;
+      return { text: onScreen?.text ?? "", numbered: result?.content_type === "verse", live: !!onScreen };
+    },
+  });
+
   const tabClass = (active: boolean) =>
     `rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
       active ? "bg-navy text-gold" : "bg-white text-navy border border-navy/20"
@@ -613,6 +661,8 @@ export default function PresentationControlPage() {
             Show on the screen straight away (otherwise it opens as a preview first)
           </label>
         </div>
+
+        <AutoPanel voice={voice} />
 
         <div className="grid gap-8 md:grid-cols-2">
           <div>
@@ -759,7 +809,7 @@ export default function PresentationControlPage() {
               <label className="flex cursor-pointer items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
                 <span>
                   <span className="block text-sm font-semibold text-navy">Auto-fit</span>
-                  <span className="block text-xs text-navy-light/60">Shrink long text so all of it fits on the screen.</span>
+                  <span className="block text-xs text-navy-light/60">Trims short text slightly to fit. Long passages keep your chosen size and scroll instead.</span>
                 </span>
                 <input type="checkbox" checked={autoFit} onChange={(e) => setAutoFit(e.target.checked)} className="h-5 w-5 accent-navy" />
               </label>

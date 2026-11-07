@@ -27,7 +27,7 @@ export async function searchDocuments(
   } = options;
 
   const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/rpc/match_documents`,
+    `${SUPABASE_URL}/rest/v1/rpc/match_documents_fast`,
     {
       method: "POST",
       headers: {

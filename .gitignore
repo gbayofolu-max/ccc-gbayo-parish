@@ -57,3 +57,4 @@ data/kjv-gutenberg-raw.txt
 
 .vercel
 .env*
+*.bak-before-*
