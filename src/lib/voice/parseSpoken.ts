@@ -516,3 +516,17 @@ export function looksLikeCommand(text: string): boolean {
   if (tokens.some((t) => words.has(t))) return true;
   return tokens.some((t) => /^\d{1,4}$/.test(t)) && tokens.length <= 8;
 }
+
+// "Psalms", "Jenesisi" and so on -> the standard book name the screen lookup understands. null when it is not a book.
+export function canonicalBook(name: string): string | null {
+  const tokens = tokenize(name);
+  if (tokens.length === 0) return null;
+  const match = matchBookAt(tokens, 0);
+  return match && match.length === tokens.length ? match.name : null;
+}
+
+// Worth asking the quote finder about: a sentence long enough to be a line of a verse or hymn.
+export function looksLikeQuote(text: string): boolean {
+  const tokens = tokenize(text);
+  return tokens.length >= 5 && tokens.length <= 40 && text.length <= 300;
+}

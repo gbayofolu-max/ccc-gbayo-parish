@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { buildLines, textKey } from "@/lib/voice/readAlong";
+import { textKey } from "@/lib/voice/readAlong";
+import ProjectorScreen, { type ScreenCommand } from "@/components/presentation/ProjectorScreen";
 
 interface PresentationState {
   content_type: string;
@@ -16,64 +17,25 @@ interface PresentationState {
   auto_fit: boolean | null;
 }
 
-function fontFamilyStyle(fontFamily: string | null): string {
-  switch (fontFamily) {
-    case "modern":
-      return "Arial, Helvetica, sans-serif";
-    case "humanist":
-      return '"Trebuchet MS", Arial, sans-serif';
-    case "readable":
-      return "Verdana, Geneva, sans-serif";
-    case "classic":
-    default:
-      return 'Georgia, "Times New Roman", serif';
-  }
-}
-
-// Text size as a share of the screen width, so every projector shows the same proportions.
-function fontSizeVw(fontSize: string | null): number {
-  switch (fontSize) {
-    case "compact":
-      return 3.125;
-    case "standard":
-      return 3.75;
-    case "large":
-      return 5;
-    case "giant":
-      return 6.67;
-    case "extra-large":
-    default:
-      return 5.5;
-  }
-}
-
-function lineHeightValue(lineSpacing: string | null): number {
-  switch (lineSpacing) {
-    case "tight":
-      return 1.25;
-    case "spacious":
-      return 2;
-    case "normal":
-    default:
-      return 1.375;
-  }
-}
-
 export default function PresentationPage() {
   const [state, setState] = useState<PresentationState | null>(null);
   const [realtimeOn, setRealtimeOn] = useState(false);
   const [started, setStarted] = useState(false);
   const [churchName, setChurchName] = useState("CCC Gbayo Parish");
-  const [pos, setPos] = useState(-1); // word the preacher has just read (-1: following has not started)
-  const boxRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
-  const wordRefs = useRef<Record<number, HTMLElement | null>>({});
+  const [pos, setPos] = useState(-1); // word the reader has just reached (-1: not following yet)
+  const [step, setStep] = useState(2);
+  const [command, setCommand] = useState<ScreenCommand | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const [debug, setDebug] = useState(false);
+  const [stats, setStats] = useState<{ counts: Record<string, number>; last: string; at: number }>({ counts: {}, last: "", at: 0 });
+  const [metrics, setMetrics] = useState("");
+  const [peers, setPeers] = useState(0);
   const wakeLock = useRef<any>(null);
+  const nonce = useRef(0);
 
   const isBlank = !state || state.content_type === "blank";
   const body = state?.body_text ?? "";
   const numbered = state?.content_type === "verse";
-  const parsed = useMemo(() => buildLines(body, numbered), [body, numbered]);
   const key = useMemo(() => textKey(body) + (numbered ? "n" : ""), [body, numbered]);
   const keyRef = useRef(key);
   keyRef.current = key;
@@ -86,6 +48,13 @@ export default function PresentationPage() {
     } catch {
       // A projector screen should never show an error: keep what was last displayed and retry quietly.
     }
+  }, []);
+
+  useEffect(() => {
+    const update = () => setSize({ w: window.innerWidth, h: window.innerHeight });
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
   // Updates arrive the moment the operator presses Show. A slow check runs as a safety net,
@@ -140,55 +109,76 @@ export default function PresentationPage() {
     return () => clearInterval(interval);
   }, [realtimeOn, refresh]);
 
-  const scrollToWord = useCallback((index: number, jump: boolean) => {
-    const box = boxRef.current;
-    const word = wordRefs.current[index];
-    const text = textRef.current;
-    if (!box || !word || !text) return;
-
-    const lineHeight = parseFloat(getComputedStyle(text).lineHeight) || 60;
-    const y = word.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
-    // Keep one line that has been read above the current line, and the unread lines below it.
-    const desired = Math.max(0, y - lineHeight * 1.1);
-
-    if (jump || Math.abs(desired - box.scrollTop) > lineHeight * 0.6) {
-      box.scrollTo({ top: desired, behavior: jump ? "auto" : "smooth" });
-    }
-  }, []);
-
-  // Reading position, and manual scroll buttons, from the control page. Live channel only: nothing is stored.
+  // Reading position, scrolling and the "I am a projector" signal, from and to the control phone. Live channel only: nothing is stored.
   useEffect(() => {
     const supabase = createClient();
+    const send = (c: Omit<ScreenCommand, "nonce">) => {
+      nonce.current += 1;
+      setCommand({ ...c, nonce: nonce.current });
+    };
+    const note = (name: string) =>
+      setStats((s) => ({ counts: { ...s.counts, [name]: (s.counts[name] ?? 0) + 1 }, last: name, at: Date.now() }));
+
     const channel = supabase
       .channel("projector-sync")
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState() as Record<string, any[]>;
+        let n = 0;
+        for (const k of Object.keys(state)) for (const meta of state[k]) if (meta?.role !== "display") n++;
+        setPeers(n);
+      })
       .on("broadcast", { event: "pos" }, ({ payload }: any) => {
+        note("pos");
         if (!payload || payload.key !== keyRef.current || typeof payload.i !== "number") return;
+        if (typeof payload.step === "number") setStep(payload.step);
         setPos(payload.i);
-        requestAnimationFrame(() => scrollToWord(payload.i, !!payload.jump));
       })
       .on("broadcast", { event: "scrollBy" }, ({ payload }: any) => {
-        const box = boxRef.current;
-        if (!box) return;
-        const share = payload?.amount === "small" ? 0.2 : payload?.amount === "large" ? 0.9 : 0.5;
-        box.scrollBy({ top: (payload?.dir === -1 ? -1 : 1) * box.clientHeight * share, behavior: "smooth" });
+        note("scrollBy");
+        send({ kind: "by", dir: payload?.dir === -1 ? -1 : 1, amount: payload?.amount });
       })
       .on("broadcast", { event: "scrollTo" }, ({ payload }: any) => {
-        const box = boxRef.current;
-        if (!box) return;
-        box.scrollTo({ top: payload?.to === "bottom" ? box.scrollHeight : 0, behavior: "smooth" });
+        note("scrollTo");
+        send({ kind: "to", to: payload?.to === "bottom" ? "bottom" : "top" });
       })
-      .subscribe();
+      .on("broadcast", { event: "stepLines" }, ({ payload }: any) => {
+        note("stepLines");
+        send({ kind: "lines", lines: typeof payload?.lines === "number" ? payload.lines : 2 });
+      })
+      .on("broadcast", { event: "ratio" }, ({ payload }: any) => {
+        note("ratio");
+        if (typeof payload?.r !== "number") return;
+        // The same word goes to the top as in the control page's preview (exact), or the same share of the way down (fallback).
+        if (payload.key && payload.key === keyRef.current && typeof payload.w === "number") send({ kind: "word", word: payload.w, ratio: payload.r });
+        else send({ kind: "ratio", ratio: payload.r });
+      })
+      .subscribe((status: string) => {
+        if (status === "SUBSCRIBED") channel.track({ role: "display", at: Date.now() });
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [scrollToWord]);
+  }, []);
 
-  // A new passage starts from the top with nothing marked as read.
+  // A new passage starts with nothing marked as read.
   useEffect(() => {
     setPos(-1);
-    boxRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [key]);
+
+  // Add ?debug=1 to this page's address to see what it is receiving (for fixing problems).
+  useEffect(() => {
+    setDebug(new URLSearchParams(window.location.search).get("debug") === "1");
+  }, []);
+
+  useEffect(() => {
+    if (!debug) return;
+    const timer = setInterval(() => {
+      const box = document.querySelector("[data-scrollbox]") as HTMLElement | null;
+      setMetrics(box ? `scrolled ${Math.round(box.scrollTop)} of ${Math.round(box.scrollHeight - box.clientHeight)} px (${box.scrollHeight - box.clientHeight > 2 ? "can scroll" : "NOTHING TO SCROLL: all text fits"})` : "no text on screen");
+    }, 500);
+    return () => clearInterval(timer);
+  }, [debug]);
 
   const acquireWakeLock = useCallback(async () => {
     try {
@@ -217,97 +207,43 @@ export default function PresentationPage() {
     acquireWakeLock();
   }
 
-  const basePx = () => (Math.min(window.innerWidth, window.innerHeight * (16 / 9)) * fontSizeVw(state?.font_size ?? null)) / 100;
-
-  // Text keeps the size that was chosen. Auto-fit may trim it a little (never below 70%) when that makes a
-  // short text fit; anything longer stays at full size and scrolls instead of shrinking into small print.
-  useLayoutEffect(() => {
-    const el = textRef.current;
-    const box = boxRef.current;
-    if (!el || !box || isBlank) return;
-
-    const apply = () => {
-      const base = basePx();
-      el.style.fontSize = `${base}px`;
-      if (!state?.auto_fit) return;
-      const room = box.clientHeight - (state?.language ? 90 : 0);
-      if (el.scrollHeight <= room) return;
-      for (let s = 0.95; s >= 0.7; s -= 0.05) {
-        el.style.fontSize = `${base * s}px`;
-        if (el.scrollHeight <= room) return;
-      }
-      el.style.fontSize = `${base}px`;
-    };
-
-    apply();
-    window.addEventListener("resize", apply);
-    return () => window.removeEventListener("resize", apply);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, isBlank, started]);
-
-  const following = pos >= 0;
-
-  function wordStyle(index: number, isNumber: boolean): CSSProperties {
-    if (isNumber) return { color: "#d4af37", fontWeight: 700, opacity: following && index < pos ? 0.6 : 1 };
-    if (!following) return {};
-    if (index === pos) return { backgroundColor: "rgba(212,175,55,0.45)", borderRadius: "0.2em", padding: "0 0.08em" };
-    if (index < pos) return { opacity: 0.5 };
-    return {};
-  }
-
   return (
-    <main className={`flex h-screen w-full flex-col overflow-hidden bg-navy px-10 py-8 text-center md:px-20 ${started ? "cursor-none" : ""}`}>
-      {isBlank ? (
-        <div className="m-auto font-serif text-4xl text-gold/30">{churchName}</div>
+    <main className={`h-screen w-full overflow-hidden bg-navy ${started ? "cursor-none" : ""}`}>
+      {isBlank || size.w === 0 ? (
+        <div className="flex h-full w-full items-center justify-center font-serif text-4xl text-gold/30">{churchName}</div>
       ) : (
-        <>
-          {state?.title && <div className="mb-6 shrink-0 font-serif text-4xl font-bold text-gold md:text-5xl">{state.title}</div>}
+        <ProjectorScreen
+          width={size.w}
+          height={size.h}
+          title={state?.title ?? null}
+          text={body}
+          numbered={numbered}
+          language={state?.language ?? null}
+          fontFamily={state?.font_family ?? null}
+          fontSize={state?.font_size ?? null}
+          lineSpacing={state?.line_spacing ?? null}
+          autoFit={!!state?.auto_fit}
+          pos={pos}
+          step={step}
+          command={command}
+        />
+      )}
 
-          <div
-            ref={boxRef}
-            className="min-h-0 w-full flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden"
-            style={{ scrollbarWidth: "none" }}
-          >
-            <div className="mx-auto flex min-h-full w-full max-w-[96rem] flex-col items-center justify-center">
-              {body && (
-                <div
-                  ref={textRef}
-                  className="w-full text-white"
-                  style={{
-                    fontFamily: fontFamilyStyle(state?.font_family ?? null),
-                    lineHeight: lineHeightValue(state?.line_spacing ?? null),
-                    textShadow: "0 2px 10px rgba(0,0,0,0.5)",
-                  }}
-                >
-                  {parsed.lines.map((line, lineIndex) =>
-                    line.start === line.end ? (
-                      <div key={lineIndex} style={{ height: "0.7em" }} />
-                    ) : (
-                      <div key={lineIndex}>
-                        {parsed.tokens.slice(line.start, line.end).map((token, offset) => {
-                          const index = line.start + offset;
-                          return (
-                            <span
-                              key={index}
-                              ref={(el) => {
-                                wordRefs.current[index] = el;
-                              }}
-                              style={wordStyle(index, token.isNumber)}
-                            >
-                              {token.text}{" "}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-
-              {state?.language && <div className="mt-10 font-sans text-2xl uppercase tracking-[0.3em] text-gold/70">{state.language}</div>}
-            </div>
+      {debug && (
+        <div className="fixed left-2 top-2 z-[60] max-w-[90vw] rounded-lg bg-black/80 p-3 text-left font-mono text-sm leading-6 text-green-300">
+          <div>live database link: {realtimeOn ? "ON" : "OFF"}</div>
+          <div>control phones seen: {peers}</div>
+          <div>
+            received:{" "}
+            {Object.keys(stats.counts).length === 0
+              ? "nothing yet"
+              : Object.entries(stats.counts)
+                  .map(([k, v]) => `${k} ${v}`)
+                  .join(", ")}
           </div>
-        </>
+          <div>last: {stats.last ? `${stats.last} ${Math.max(0, Math.round((Date.now() - stats.at) / 1000))}s ago` : "-"}</div>
+          <div>{metrics}</div>
+        </div>
       )}
 
       <div

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoMode } from "@/lib/voice/useAutoMode";
 import AutoPanel from "@/components/presentation/AutoPanel";
+import ProjectorScreen, { COLUMN_MARK, type ScreenCommand } from "@/components/presentation/ProjectorScreen";
 
 type Tab = "verse" | "hymn" | "custom";
 type HymnLanguage = "both" | "yoruba" | "english";
@@ -120,6 +121,15 @@ function parseQuick(input: string):
   };
 }
 
+// Yoruba and English stanzas side by side, row by row. A line holding only "${COLUMN_MARK}" separates the two columns.
+function sideBySideRows(yo: string[], en: string[]): string[] {
+  const rows: string[] = [];
+  for (let i = 0; i < Math.max(yo.length, en.length); i++) {
+    rows.push(`${yo[i] ?? "—"}\n${COLUMN_MARK}\n${en[i] ?? "—"}`);
+  }
+  return rows;
+}
+
 function buildSlides(
   result: LookupResult | null,
   slideMode: SlideMode,
@@ -128,6 +138,26 @@ function buildSlides(
 ): Slide[] {
   if (!result || !result.body_text) return [];
   const whole: Slide[] = [{ title: result.title, text: result.body_text }];
+
+  // Both languages: the Yoruba and English stanzas sit side by side and scroll together.
+  if (result.content_type === "hymn" && hymnLanguage === "both" && result.parts) {
+    const yoStanzas = splitStanzas(result.parts.yoruba);
+    const enStanzas = splitStanzas(result.parts.english);
+    if (yoStanzas.length > 0 && enStanzas.length > 0) {
+      const rows = sideBySideRows(yoStanzas, enStanzas);
+      if (slideMode === "split") return rows.map((text) => ({ title: result.title, text }));
+      return [{ title: result.title, text: rows.join("\n\n") }];
+    }
+  }
+
+  // Announcements: a line holding only --- starts a new slide, in every mode.
+  if (result.content_type === "announcement") {
+    const parts = result.body_text
+      .split(/\n\s*---+\s*\n/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length > 1) return parts.map((text) => ({ title: result.title, text }));
+  }
 
   if (slideMode !== "split") return whole;
 
@@ -157,14 +187,6 @@ function buildSlides(
     return whole;
   }
 
-  if (result.content_type === "announcement") {
-    const parts = result.body_text
-      .split(/\n\s*---+\s*\n/)
-      .map((part) => part.trim())
-      .filter(Boolean);
-    if (parts.length > 1) return parts.map((text) => ({ title: result.title, text }));
-  }
-
   return whole;
 }
 
@@ -176,9 +198,13 @@ function ScreenPreview(props: {
   fontSize: string;
   lineSpacing: string;
   autoFit: boolean;
+  numbered: boolean;
+  pos: number;
+  step: number;
+  command: ScreenCommand | null;
+  onUserScroll: (ratio: number) => void;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.3);
   const [overflow, setOverflow] = useState(false);
 
@@ -192,61 +218,34 @@ function ScreenPreview(props: {
     return () => observer.disconnect();
   }, []);
 
-  const basePx = (fontSizeVw(props.fontSize) / 100) * 1280;
-
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el) return;
-    el.style.fontSize = `${basePx}px`;
-    const limit = 720 * (props.title ? 0.72 : 0.84);
-
-    if (props.autoFit && el.scrollHeight > limit) {
-      // Auto-fit only trims a little. Long passages keep the chosen size and scroll on the projector.
-      let fitted = false;
-      for (let s = 0.95; s >= 0.7; s -= 0.05) {
-        el.style.fontSize = `${basePx * s}px`;
-        if (el.scrollHeight <= limit) {
-          fitted = true;
-          break;
-        }
-      }
-      if (!fitted) el.style.fontSize = `${basePx}px`;
-      setOverflow(!fitted);
-    } else {
-      setOverflow(el.scrollHeight > limit);
-    }
-  }, [props.text, props.title, props.autoFit, props.fontFamily, props.fontSize, props.lineSpacing, basePx]);
-
+  // The same drawing the projector uses, so what you see here is what the congregation sees.
+  // Scroll this preview with your finger and the projector scrolls with it.
   return (
     <div>
       <div ref={boxRef} className="relative aspect-video w-full overflow-hidden rounded-xl border-2 border-gold bg-navy">
-        <div
-          className="absolute left-0 top-0 flex flex-col items-center justify-center px-16 py-8 text-center"
-          style={{ width: 1280, height: 720, transform: `scale(${scale})`, transformOrigin: "top left" }}
-        >
-          {props.title && (
-            <div className="mb-6 font-serif text-4xl font-bold text-gold">{props.title}</div>
-          )}
-          <div
-            ref={textRef}
-            className="whitespace-pre-line text-white"
-            style={{
-              fontFamily: fontFamilyStyle(props.fontFamily),
-              lineHeight: lineHeightValue(props.lineSpacing),
-              fontSize: `${basePx}px`,
-              textShadow: "0 2px 10px rgba(0,0,0,0.5)",
-            }}
-          >
-            {props.text}
-          </div>
-          {props.language && (
-            <div className="mt-6 font-sans text-2xl uppercase tracking-[0.3em] text-gold/70">{props.language}</div>
-          )}
+        <div className="absolute left-0 top-0" style={{ width: 1280, height: 720, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+          <ProjectorScreen
+            width={1280}
+            height={720}
+            title={props.title}
+            text={props.text}
+            numbered={props.numbered}
+            language={props.language}
+            fontFamily={props.fontFamily}
+            fontSize={props.fontSize}
+            lineSpacing={props.lineSpacing}
+            autoFit={props.autoFit}
+            pos={props.pos}
+            step={props.step}
+            command={props.command}
+            onUserScroll={props.onUserScroll}
+            onOverflow={setOverflow}
+          />
         </div>
       </div>
       {overflow && (
         <p className="mt-2 text-xs font-semibold text-red-600">
-          Long text: the projector keeps this size and scrolls it. Use Auto mode (it follows the reading) or the Scroll buttons.
+          Long text: it keeps this size. Scroll this preview with your finger and the projector scrolls with it, or use Auto mode.
         </p>
       )}
     </div>
@@ -827,15 +826,20 @@ export default function PresentationControlPage() {
                   fontSize={fontSize}
                   lineSpacing={lineSpacing}
                   autoFit={autoFit}
+                  numbered={result?.content_type === "verse"}
+                  pos={isLive && liveIndex === Math.min(slideIndex, Math.max(slides.length - 1, 0)) ? voice.reading.word : -1}
+                  step={voice.stepLines}
+                  command={voice.lastScroll}
+                  onUserScroll={voice.sendRatio}
                 />
 
                 {(result?.content_type === "verse" || result?.content_type === "hymn" || slides.length > 1) && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-3">
                     <span className="text-xs font-semibold uppercase tracking-wide text-navy-light/70">Slides</span>
-                    <button onClick={() => { setSlideMode("all"); setSlideIndex(0); setLiveIndex(null); }} className={chip(slideMode === "all")}>
+                    <button onClick={() => { setSlideMode("all"); setSlideIndex(0); setLiveIndex(null); }} className={`${chip(slideMode === "all")} ${result?.content_type === "announcement" ? "hidden" : ""}`}>
                       Whole text
                     </button>
-                    <button onClick={() => { setSlideMode("split"); setSlideIndex(0); setLiveIndex(null); }} className={chip(slideMode === "split")}>
+                    <button onClick={() => { setSlideMode("split"); setSlideIndex(0); setLiveIndex(null); }} className={`${chip(slideMode === "split")} ${result?.content_type === "announcement" ? "hidden" : ""}`}>
                       {result?.content_type === "verse" ? "By verse" : "By stanza"}
                     </button>
                     {slideMode === "split" && result?.content_type === "verse" && (

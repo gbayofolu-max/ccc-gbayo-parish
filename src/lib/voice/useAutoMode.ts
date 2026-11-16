@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { parseSpoken, parseInstant, commandFromIntent, looksLikeCommand, type SpokenCommand } from "@/lib/voice/parseSpoken";
+import { parseSpoken, parseInstant, commandFromIntent, looksLikeCommand, looksLikeQuote, canonicalBook, type SpokenCommand } from "@/lib/voice/parseSpoken";
 import { Aligner, buildLines, textKey, type Token } from "@/lib/voice/readAlong";
+import type { ScreenCommand } from "@/components/presentation/ProjectorScreen";
 
 export interface PassageInfo {
   text: string; // exactly what is on the projector
@@ -55,14 +56,23 @@ export function useAutoMode(actions: AutoActions) {
   const [follow, setFollow] = useState(true);
   const [gate, setGate] = useState("off");
   const [ai, setAi] = useState(true);
+  const [quotes, setQuotes] = useState(true);
+  const [suggestions, setSuggestions] = useState<{ id: number; label: string; command: SpokenCommand }[]>([]);
+  const [stepLines, setStepLines] = useState(2);
+  const [hymnInstant, setHymnInstant] = useState(true);
+  const [pace, setPace] = useState(0); // seconds per step for timed scrolling, 0 = off
+  const [projectors, setProjectors] = useState(0);
+  const [lastScroll, setLastScroll] = useState<ScreenCommand | null>(null);
   const [paused, setPaused] = useState(false);
   const [reading, setReading] = useState<{ verse: number | null; word: number; total: number }>({ verse: null, word: -1, total: 0 });
   const [level, setLevel] = useState(0);
 
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
-  const settingsRef = useRef({ delaySeconds, navigation, follow, gate, ai });
-  settingsRef.current = { delaySeconds, navigation, follow, gate, ai };
+  const settingsRef = useRef({ delaySeconds, navigation, follow, gate, ai, stepLines, hymnInstant, quotes });
+  settingsRef.current = { delaySeconds, navigation, follow, gate, ai, stepLines, hymnInstant, quotes };
+  const suggestionsRef = useRef(suggestions);
+  suggestionsRef.current = suggestions;
   const pausedRef = useRef(false);
   pausedRef.current = paused;
 
@@ -73,7 +83,11 @@ export function useAutoMode(actions: AutoActions) {
   const lastKey = useRef({ key: "", at: 0 });
   const logId = useRef(0);
   const lastLoudAt = useRef(0);
+  const scrollNonce = useRef(0);
   const aiBusy = useRef(false);
+  const quoteBusy = useRef(false);
+  const quoteCalls = useRef<number[]>([]);
+  const lastQuoteText = useRef("");
   const aiCalls = useRef<number[]>([]);
 
   const channelRef = useRef<any>(null);
@@ -95,8 +109,16 @@ export function useAutoMode(actions: AutoActions) {
   // ---- live channel to the projector (no database writes) ----
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase.channel("projector-sync");
-    channel.subscribe();
+    const channel = supabase.channel("projector-sync", { config: { presence: { key: `control-${Math.random().toString(36).slice(2, 8)}` } } });
+    // How many projector screens are connected right now (the second phone, or a laptop)?
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState() as Record<string, any[]>;
+        let count = 0;
+        for (const key of Object.keys(state)) for (const meta of state[key]) if (meta?.role === "display") count++;
+        setProjectors(count);
+      })
+      .subscribe();
     channelRef.current = channel;
     return () => {
       supabase.removeChannel(channel);
@@ -133,7 +155,7 @@ export function useAutoMode(actions: AutoActions) {
 
       const flush = () => {
         lastSent.current = Date.now();
-        send("pos", { key: state.key, i: index, jump });
+        send("pos", { key: state.key, i: index, jump, step: settingsRef.current.stepLines });
       };
       if (trailing.current) clearTimeout(trailing.current);
       const wait = jump ? 0 : Math.max(0, 120 - (Date.now() - lastSent.current));
@@ -198,10 +220,30 @@ export function useAutoMode(actions: AutoActions) {
   );
 
   const scrollBy = useCallback(
-    (direction: 1 | -1, amount: "small" | "normal" | "large" = "normal") => send("scrollBy", { dir: direction, amount }),
+    (direction: 1 | -1, amount: "small" | "normal" | "large" = "normal") => {
+      send("scrollBy", { dir: direction, amount });
+      scrollNonce.current += 1;
+      setLastScroll({ nonce: scrollNonce.current, kind: "by", dir: direction, amount });
+    },
     [send]
   );
-  const scrollTo = useCallback((to: "top" | "bottom") => send("scrollTo", { to }), [send]);
+  const scrollTo = useCallback(
+    (to: "top" | "bottom") => {
+      send("scrollTo", { to });
+      scrollNonce.current += 1;
+      setLastScroll({ nonce: scrollNonce.current, kind: "to", to });
+    },
+    [send]
+  );
+  // The preview on this page was scrolled by hand: the projector follows.
+  const sendRatio = useCallback(
+    (r: number, word?: number) => {
+      const passage = actionsRef.current.getPassage();
+      const key = passage.text ? textKey(passage.text) + (passage.numbered ? "n" : "") : "";
+      send("ratio", { r, w: typeof word === "number" ? word : undefined, key });
+    },
+    [send]
+  );
 
   // ---- commands that change what is on the screen (with a short cancel window) ----
   const clearTimer = useCallback(() => {
@@ -226,6 +268,7 @@ export function useAutoMode(actions: AutoActions) {
   );
 
   const run = useCallback((command: SpokenCommand) => {
+    setSuggestions([]);
     const a = actionsRef.current;
     if (command.type === "verse") a.showVerse(command);
     else if (command.type === "hymn") a.showHymn(command);
@@ -236,19 +279,25 @@ export function useAutoMode(actions: AutoActions) {
   }, []);
 
   const schedule = useCallback(
-    (command: SpokenCommand, heardText: string) => {
+    (command: SpokenCommand, heardText: string, slow = false) => {
       const key = `${command.type}:${command.label}`;
       const now = Date.now();
 
       // The preacher often repeats a reference: do not flash the same thing again within 8 seconds.
-      if (lastKey.current.key === key && now - lastKey.current.at < 8000) {
+      if (lastKey.current.key === key && now - lastKey.current.at < (command.type === "hymn" ? 30000 : 8000)) {
         addLog(heardText, `Ignored repeat: ${command.label}`);
         return;
       }
       lastKey.current = { key, at: now };
 
       clearTimer();
-      const delay = settingsRef.current.delaySeconds;
+      // A hymn number goes on the screen at once (it then stays until another hymn number is said).
+      // A quote found without a number or reference always gets a cancel window (at least 2 seconds).
+      const delay = slow
+        ? Math.max(2, settingsRef.current.delaySeconds)
+        : command.type === "hymn" && settingsRef.current.hymnInstant
+          ? 0
+          : settingsRef.current.delaySeconds;
 
       if (delay <= 0) {
         setPending(null);
@@ -349,6 +398,83 @@ export function useAutoMode(actions: AutoActions) {
   const aiRef = useRef(interpretWithAI);
   aiRef.current = interpretWithAI;
 
+  // Quote finder: the preacher quotes a verse or the choir sings a hymn line without saying the number or reference.
+  // A sure match goes through the cancel window; a likely one appears as a tap-to-show suggestion.
+  const scheduleRef = useRef(schedule);
+  scheduleRef.current = schedule;
+
+  const findQuote = useCallback(async (text: string) => {
+    const now = Date.now();
+    quoteCalls.current = quoteCalls.current.filter((t) => now - t < 60000);
+    if (quoteBusy.current || quoteCalls.current.length >= 10 || text === lastQuoteText.current) {
+      logRef.current(text, "Heard, but no command found");
+      return;
+    }
+    lastQuoteText.current = text;
+    quoteBusy.current = true;
+    quoteCalls.current.push(now);
+
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) throw new Error("not signed in");
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch("/api/voice/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text: text.slice(0, 300) }),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      const body = await res.json();
+      const found: { label: string; command: SpokenCommand }[] = [];
+      for (const m of Array.isArray(body?.matches) ? body.matches.slice(0, 3) : []) {
+        const command =
+          m?.type === "hymn"
+            ? commandFromIntent({ intent: "hymn", number: m.number, language: m.language })
+            : commandFromIntent({ intent: "verse", book: canonicalBook(String(m?.book ?? "")) ?? m?.book, chapter: m?.chapter, verseStart: m?.verse, verseEnd: "", language: m?.language });
+        if (command) found.push({ label: `${command.label}${"language" in command && command.language ? ` (${command.language})` : ""}`, command });
+      }
+
+      if (found.length === 0) {
+        logRef.current(text, "Heard, but no command found");
+      } else if (body?.confidence === "high") {
+        logRef.current(text, `Quote recognised: ${found[0].command.label}`);
+        scheduleRef.current(found[0].command, text, true);
+      } else {
+        logRef.current(text, `Possible quote: ${found.map((f) => f.command.label).join(", ")}`);
+        setSuggestions(found.map((f, i) => ({ id: Date.now() + i, label: f.label, command: f.command })));
+      }
+    } catch {
+      logRef.current(text, "Heard, but no command found (quote finder unavailable)");
+    } finally {
+      quoteBusy.current = false;
+    }
+  }, []);
+  const quoteRef = useRef(findQuote);
+  quoteRef.current = findQuote;
+
+  const acceptSuggestion = useCallback(
+    (id: number) => {
+      const chosen = suggestionsRef.current.find((s) => s.id === id);
+      if (!chosen) return;
+      run(chosen.command);
+      addLog("Tapped a suggestion", `Shown: ${chosen.command.label}`);
+    },
+    [addLog, run]
+  );
+  const dismissSuggestions = useCallback(() => setSuggestions([]), []);
+
+  // Suggestions go away by themselves after a minute.
+  useEffect(() => {
+    if (suggestions.length === 0) return;
+    const timer = setTimeout(() => setSuggestions([]), 60000);
+    return () => clearTimeout(timer);
+  }, [suggestions]);
+
   // ---- settings ----
   useEffect(() => {
     try {
@@ -359,6 +485,10 @@ export function useAutoMode(actions: AutoActions) {
       if (typeof saved.follow === "boolean") setFollow(saved.follow);
       if (typeof saved.gate === "string" && saved.gate in GATE_LEVELS) setGate(saved.gate);
       if (typeof saved.ai === "boolean") setAi(saved.ai);
+      if (typeof saved.stepLines === "number" && saved.stepLines >= 1 && saved.stepLines <= 6) setStepLines(saved.stepLines);
+      if (typeof saved.hymnInstant === "boolean") setHymnInstant(saved.hymnInstant);
+      if (typeof saved.quotes === "boolean") setQuotes(saved.quotes);
+      if (typeof saved.pace === "number" && saved.pace >= 0 && saved.pace <= 60) setPace(saved.pace);
     } catch {
       // Ignore unreadable saved settings.
     }
@@ -368,11 +498,23 @@ export function useAutoMode(actions: AutoActions) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ delaySeconds, navigation, accent, follow, gate, ai }));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ delaySeconds, navigation, accent, follow, gate, ai, stepLines, hymnInstant, pace, quotes }));
     } catch {
       // Settings simply will not be remembered.
     }
-  }, [delaySeconds, navigation, accent, follow, gate, ai]);
+  }, [delaySeconds, navigation, accent, follow, gate, ai, stepLines, hymnInstant, pace, quotes]);
+
+  // ---- timed scrolling: when singing cannot be followed by the microphone, move on every few seconds ----
+  useEffect(() => {
+    if (!enabled || pace <= 0 || paused) return;
+    const timer = setInterval(() => {
+      if (!actionsRef.current.getPassage().live) return;
+      send("stepLines", { lines: settingsRef.current.stepLines });
+      scrollNonce.current += 1;
+      setLastScroll({ nonce: scrollNonce.current, kind: "lines", lines: settingsRef.current.stepLines });
+    }, pace * 1000);
+    return () => clearInterval(timer);
+  }, [enabled, pace, paused, send]);
 
   // ---- loud-voice gate: ignore speech that is much quieter than the preacher's microphone ----
   useEffect(() => {
@@ -490,9 +632,11 @@ export function useAutoMode(actions: AutoActions) {
           const moved = feedRef.current(result[0].transcript);
           // Short sentences that were not a command are listed, so you can see what the microphone actually heard.
           const heardText: string = result[0].transcript;
-          if (!moved && heardText.trim().split(/\s+/).length <= 16) {
-            if (settingsRef.current.ai && looksLikeCommand(heardText)) aiRef.current(heardText);
-            else logRef.current(heardText, "Heard, but no command found");
+          if (!moved) {
+            const short = heardText.trim().split(/\s+/).length <= 16;
+            if (short && settingsRef.current.ai && looksLikeCommand(heardText)) aiRef.current(heardText);
+            else if (settingsRef.current.quotes && looksLikeQuote(heardText)) quoteRef.current(heardText);
+            else if (short) logRef.current(heardText, "Heard, but no command found");
           }
         }
       }
@@ -591,6 +735,20 @@ export function useAutoMode(actions: AutoActions) {
     setGate,
     ai,
     setAi,
+    quotes,
+    setQuotes,
+    suggestions,
+    acceptSuggestion,
+    dismissSuggestions,
+    stepLines,
+    setStepLines,
+    hymnInstant,
+    setHymnInstant,
+    pace,
+    setPace,
+    projectors,
+    lastScroll,
+    sendRatio,
     level,
     paused,
     pause: () => pause("Pause button"),

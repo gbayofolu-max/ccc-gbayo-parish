@@ -25,6 +25,14 @@ export default function AutoPanel({ voice }: { voice: AutoModeApi }) {
             >
               {voice.enabled ? (voice.paused ? "AUTO · PAUSED" : "AUTO") : "MANUAL"}
             </span>
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold ${
+                voice.projectors > 0 ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
+              }`}
+              title="Open /presentation on the projector phone and tap it once"
+            >
+              {voice.projectors > 0 ? `Projector connected${voice.projectors > 1 ? ` (${voice.projectors})` : ""}` : "No projector connected"}
+            </span>
           </div>
           <p className="text-xs text-navy-light/60">
             Say a reference such as &ldquo;Genesis chapter 3 verse 1&rdquo; or &ldquo;hymn number 5 from our hymn book&rdquo; and it goes on the
@@ -67,6 +75,22 @@ export default function AutoPanel({ voice }: { voice: AutoModeApi }) {
           <button onClick={voice.cancelPending} className="rounded-lg border border-red-300 bg-white px-3 py-1 text-sm font-semibold text-red-700">
             Cancel
           </button>
+        </div>
+      )}
+
+      {voice.suggestions.length > 0 && (
+        <div className="mt-3 rounded-lg border border-gold bg-gold/10 px-4 py-3">
+          <p className="text-sm font-semibold text-navy">It sounded like a quote. Tap the right one to show it:</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {voice.suggestions.map((s) => (
+              <button key={s.id} onClick={() => voice.acceptSuggestion(s.id)} className="rounded-lg bg-navy px-4 py-2 text-sm font-bold text-gold">
+                {s.label}
+              </button>
+            ))}
+            <button onClick={voice.dismissSuggestions} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700">
+              Not these
+            </button>
+          </div>
         </div>
       )}
 
@@ -140,6 +164,35 @@ export default function AutoPanel({ voice }: { voice: AutoModeApi }) {
               <option value="high">High (only a loud microphone)</option>
             </select>
           </div>
+          <div>
+            <label className={labelClass}>Scroll after reading</label>
+            <select className={inputClass} value={voice.stepLines} onChange={(e) => voice.setStepLines(Number(e.target.value))}>
+              <option value={1}>every line</option>
+              <option value={2}>every 2 lines</option>
+              <option value={3}>every 3 lines</option>
+              <option value={4}>every 4 lines</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Timed scrolling (for singing)</label>
+            <select className={inputClass} value={voice.pace} onChange={(e) => voice.setPace(Number(e.target.value))}>
+              <option value={0}>Off (follow the voice)</option>
+              <option value={4}>every 4 seconds</option>
+              <option value={6}>every 6 seconds</option>
+              <option value={8}>every 8 seconds</option>
+              <option value={10}>every 10 seconds</option>
+              <option value={15}>every 15 seconds</option>
+              <option value={20}>every 20 seconds</option>
+            </select>
+          </div>
+          <label className="flex items-end gap-2 pb-2 text-sm text-navy">
+            <input type="checkbox" checked={voice.hymnInstant} onChange={(e) => voice.setHymnInstant(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
+            <span>Show a hymn the moment its number is said (it stays until another hymn number is said)</span>
+          </label>
+          <label className="flex items-end gap-2 pb-2 text-sm text-navy">
+            <input type="checkbox" checked={voice.quotes} onChange={(e) => voice.setQuotes(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
+            <span>Recognise a quoted verse or sung hymn line even when no number or reference is said</span>
+          </label>
           <label className="flex items-end gap-2 pb-2 text-sm text-navy">
             <input type="checkbox" checked={voice.ai} onChange={(e) => voice.setAi(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
             <span>Smart understanding (AI): reads short sentences the fixed rules miss, e.g. &ldquo;take us to the hymn book, one seventy six&rdquo;</span>
