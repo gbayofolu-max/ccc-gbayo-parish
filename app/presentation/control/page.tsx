@@ -502,6 +502,64 @@ export default function PresentationControlPage() {
     pushSlide(slide, Math.min(slideIndex, Math.max(slides.length - 1, 0)), result);
   }
 
+  // "Next verse" when the slides have run out: load the following verses of the same chapter (or the earlier ones, for Previous).
+  // A lookup that fails (the chapter has ended) never clears what is on the screen.
+  async function continueVerses(direction: 1 | -1): Promise<boolean> {
+    if (result?.content_type !== "verse" || !result.verses || result.verses.length === 0 || !book.trim() || !chapter.trim()) return false;
+    const numbers = result.verses.map((v) => v.verse);
+    const first = Math.min(...numbers);
+    const last = Math.max(...numbers);
+    const span = Math.max(1, Math.min(versesPerSlide, 4));
+    let start: number;
+    let end: number;
+    if (direction > 0) {
+      start = last + 1;
+      end = last + span;
+    } else {
+      if (first <= 1) {
+        setStatus("That is the first verse.");
+        return true;
+      }
+      end = first - 1;
+      start = Math.max(1, first - span);
+    }
+
+    const attempt = async (s: number, e: number): Promise<LookupResult | null> => {
+      const res = await fetch("/api/presentation/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "verse", book, chapter, verseStart: String(s), verseEnd: String(e), language }),
+      });
+      return res.ok ? ((await res.json()) as LookupResult) : null;
+    };
+
+    try {
+      let data = await attempt(start, end);
+      if (!data && direction > 0 && end > start) data = await attempt(start, start); // the chapter may end before the full span
+      if (!data || !data.verses || data.verses.length === 0) {
+        setStatus(direction > 0 ? "That was the last verse of the chapter." : "That is the first verse.");
+        return true;
+      }
+      const shown = data.verses.map((v) => v.verse);
+      setVerseStart(String(Math.min(...shown)));
+      setVerseEnd(String(Math.max(...shown)));
+      applyResult(data, isLive);
+    } catch {
+      setStatus("Network error. Try again.");
+    }
+    return true;
+  }
+
+  // "Show the announcement": puts what is typed in the Announcement tab on the screen.
+  function showTypedAnnouncement() {
+    if (!customBody.trim()) {
+      setTab("custom");
+      setStatus("Type the announcement in the Announcement tab first.");
+      return;
+    }
+    applyResult({ content_type: "announcement", title: customTitle || null, body_text: customBody, reference: null, language: null, verses: null }, true);
+  }
+
   function goTo(next: number) {
     if (next < 0 || next >= slides.length) return;
     setSlideIndex(next);
@@ -586,8 +644,11 @@ export default function PresentationControlPage() {
       setHymnNumber(cmd.number);
       lookupHymn(cmd.number, lang, true);
     },
-    next: () => goTo(slideIndex + 1),
-    previous: () => goTo(slideIndex - 1),
+    // Next / Previous: the next slide, or when the slides run out, carry on into the following (or earlier) verses of the chapter.
+    next: () => (slideIndex + 1 < slides.length ? goTo(slideIndex + 1) : void continueVerses(1)),
+    previous: () => (slideIndex > 0 ? goTo(slideIndex - 1) : void continueVerses(-1)),
+    slideCount: () => slides.length,
+    showAnnouncement: () => showTypedAnnouncement(),
     blank: () => blankScreen(),
     switchLanguage: (lang) => {
       if (result?.content_type === "hymn") {
@@ -597,6 +658,9 @@ export default function PresentationControlPage() {
         lookupVerse({ book, chapter, verseStart, verseEnd }, isLive, lang);
       }
     },
+    // A meaning from "let's see the meaning of happiness": shown on the screen, or placed in the preview to be checked first.
+    showText: (title, body, show) =>
+      applyResult({ content_type: "announcement", title, body_text: body, reference: null, language: null, verses: null }, show),
     // What is on the projector right now, so the read-along follows the right text.
     getPassage: () => {
       const onScreen = liveIndex !== null ? slides[liveIndex] : null;
@@ -885,8 +949,8 @@ export default function PresentationControlPage() {
             {status && <div className="truncate text-navy-light/70">{status}</div>}
           </div>
           <button
-            onClick={() => goTo(slideIndex - 1)}
-            disabled={slides.length < 2 || slideIndex <= 0}
+            onClick={() => (slideIndex > 0 ? goTo(slideIndex - 1) : void continueVerses(-1))}
+            disabled={result?.content_type === "verse" && result.verses && result.verses.length > 0 ? slideIndex <= 0 && Math.min(...result.verses.map((v) => v.verse)) <= 1 : slides.length < 2 || slideIndex <= 0}
             className="rounded-lg border border-navy/20 px-4 py-3 text-sm font-semibold text-navy disabled:opacity-40"
           >
             ◀ Previous
@@ -899,8 +963,8 @@ export default function PresentationControlPage() {
             {isLive ? "Update screen" : "Show on screen"}
           </button>
           <button
-            onClick={() => goTo(slideIndex + 1)}
-            disabled={slides.length < 2 || slideIndex >= slides.length - 1}
+            onClick={() => (slideIndex + 1 < slides.length ? goTo(slideIndex + 1) : void continueVerses(1))}
+            disabled={result?.content_type === "verse" && result.verses && result.verses.length > 0 ? false : slides.length < 2 || slideIndex >= slides.length - 1}
             className="rounded-lg border border-navy/20 px-4 py-3 text-sm font-semibold text-navy disabled:opacity-40"
           >
             Next ▶

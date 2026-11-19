@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { parseSpoken, parseInstant, commandFromIntent, looksLikeCommand, looksLikeQuote, canonicalBook, type SpokenCommand } from "@/lib/voice/parseSpoken";
 import { Aligner, buildLines, textKey, type Token } from "@/lib/voice/readAlong";
 import type { ScreenCommand } from "@/components/presentation/ProjectorScreen";
+import { formatMeaning, meaningTitle } from "@/lib/voice/meaning";
 
 export interface PassageInfo {
   text: string; // exactly what is on the projector
@@ -20,6 +21,10 @@ export interface AutoActions {
   blank: () => void;
   switchLanguage: (language: "english" | "yoruba") => void;
   getPassage: () => PassageInfo;
+  // Put a text slide on the screen (show = true) or only in the preview to be checked first (show = false).
+  showText?: (title: string, body: string, show: boolean) => void;
+  showAnnouncement?: () => void; // put the announcement typed in the Announcement tab on the screen
+  slideCount?: () => number; // how many slides the current passage has
 }
 
 export interface VoiceLogEntry {
@@ -57,6 +62,11 @@ export function useAutoMode(actions: AutoActions) {
   const [gate, setGate] = useState("off");
   const [ai, setAi] = useState(true);
   const [quotes, setQuotes] = useState(true);
+  const [verseInstant, setVerseInstant] = useState(true);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  const [meaningLanguage, setMeaningLanguage] = useState<"english" | "yoruba" | "both">("english");
+  const [checkYoruba, setCheckYoruba] = useState(true);
+  const [lookup, setLookup] = useState("");
   const [suggestions, setSuggestions] = useState<{ id: number; label: string; command: SpokenCommand }[]>([]);
   const [stepLines, setStepLines] = useState(2);
   const [hymnInstant, setHymnInstant] = useState(true);
@@ -69,8 +79,10 @@ export function useAutoMode(actions: AutoActions) {
 
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
-  const settingsRef = useRef({ delaySeconds, navigation, follow, gate, ai, stepLines, hymnInstant, quotes });
-  settingsRef.current = { delaySeconds, navigation, follow, gate, ai, stepLines, hymnInstant, quotes };
+  const settingsRef = useRef({ delaySeconds, navigation, follow, gate, ai, stepLines, hymnInstant, quotes, meaningLanguage, checkYoruba, verseInstant, autoAdvance });
+  settingsRef.current = { delaySeconds, navigation, follow, gate, ai, stepLines, hymnInstant, quotes, meaningLanguage, checkYoruba, verseInstant, autoAdvance };
+  const readingRef = useRef(reading);
+  readingRef.current = reading;
   const suggestionsRef = useRef(suggestions);
   suggestionsRef.current = suggestions;
   const pausedRef = useRef(false);
@@ -86,6 +98,10 @@ export function useAutoMode(actions: AutoActions) {
   const scrollNonce = useRef(0);
   const aiBusy = useRef(false);
   const quoteBusy = useRef(false);
+  const refTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const smartNextRef = useRef<() => void>(() => {});
+  const smartPreviousRef = useRef<() => void>(() => {});
   const quoteCalls = useRef<number[]>([]);
   const lastQuoteText = useRef("");
   const aiCalls = useRef<number[]>([]);
@@ -171,7 +187,24 @@ export function useAutoMode(actions: AutoActions) {
       const state = ensureAligner();
       if (!state) return false;
       const result = state.aligner.feed(text.trim().split(/\s+/));
-      if (result) report(result.index, result.jumped);
+      if (result) {
+        report(result.index, result.jumped);
+
+        // The last word has been read: after a moment, move on by itself (the next verse, or the next stanza).
+        if (advanceTimer.current) {
+          clearTimeout(advanceTimer.current);
+          advanceTimer.current = null;
+        }
+        if (settingsRef.current.autoAdvance && state.aligner.remaining() <= 1) {
+          const keyAtStart = state.key;
+          advanceTimer.current = setTimeout(() => {
+            advanceTimer.current = null;
+            if (pausedRef.current || alignRef.current?.key !== keyAtStart) return;
+            logRef.current("Finished reading", "Moved on by itself");
+            smartNextRef.current();
+          }, 1600);
+        }
+      }
       return !!result;
     },
     [ensureAligner, report]
@@ -245,6 +278,38 @@ export function useAutoMode(actions: AutoActions) {
     [send]
   );
 
+  // "Next" and "Previous" that understand what is on the screen. When a whole chapter is showing, they move to the next or earlier verse
+  // inside it; otherwise (or at its end) they go to the next slide, and the page carries on into the following verses of the chapter.
+  const smartNext = useCallback(() => {
+    const a = actionsRef.current;
+    const passage = a.getPassage();
+    if (passage.live && passage.numbered && (a.slideCount?.() ?? 2) <= 1) {
+      const state = ensureAligner();
+      const target = (readingRef.current.verse ?? 0) + 1;
+      if (state && state.tokens.some((t) => t.isNumber && t.verse === target)) {
+        gotoVerse(target, "Next verse");
+        return;
+      }
+    }
+    a.next();
+  }, [ensureAligner, gotoVerse]);
+  smartNextRef.current = smartNext;
+
+  const smartPrevious = useCallback(() => {
+    const a = actionsRef.current;
+    const passage = a.getPassage();
+    const current = readingRef.current.verse;
+    if (passage.live && passage.numbered && (a.slideCount?.() ?? 2) <= 1 && current !== null && current > 1) {
+      const state = ensureAligner();
+      if (state && state.tokens.some((t) => t.isNumber && t.verse === current - 1)) {
+        gotoVerse(current - 1, "Previous verse");
+        return;
+      }
+    }
+    a.previous();
+  }, [ensureAligner, gotoVerse]);
+  smartPreviousRef.current = smartPrevious;
+
   // ---- commands that change what is on the screen (with a short cancel window) ----
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -272,8 +337,12 @@ export function useAutoMode(actions: AutoActions) {
     const a = actionsRef.current;
     if (command.type === "verse") a.showVerse(command);
     else if (command.type === "hymn") a.showHymn(command);
-    else if (command.type === "next") a.next();
-    else if (command.type === "previous") a.previous();
+    else if (command.type === "next") smartNextRef.current();
+    else if (command.type === "previous") smartPreviousRef.current();
+    else if (command.type === "announcement") {
+      if (a.showAnnouncement) a.showAnnouncement();
+      else logRef.current("Announcement", "Announcements are not set up on this page yet");
+    }
     else if (command.type === "blank") a.blank();
     else if (command.type === "language") a.switchLanguage(command.language);
   }, []);
@@ -283,9 +352,18 @@ export function useAutoMode(actions: AutoActions) {
       const key = `${command.type}:${command.label}`;
       const now = Date.now();
 
-      // The preacher often repeats a reference: do not flash the same thing again within 8 seconds.
-      if (lastKey.current.key === key && now - lastKey.current.at < (command.type === "hymn" ? 30000 : 8000)) {
-        addLog(heardText, `Ignored repeat: ${command.label}`);
+      // The preacher often repeats a reference: do not flash the same thing again for a while. "Next" can be said twice in a row.
+      const windowMs =
+        command.type === "next" || command.type === "previous"
+          ? 1200
+          : command.type === "hymn"
+            ? 30000
+            : command.type === "blank" || command.type === "language" || command.type === "announcement"
+              ? 3000
+              : 8000;
+      if (lastKey.current.key === key && now - lastKey.current.at < windowMs) {
+        // A quick repeat (the half-finished and the finished version of one sentence) stays quiet.
+        if (now - lastKey.current.at > 4000) addLog(heardText, `Ignored repeat: ${command.label}`);
         return;
       }
       lastKey.current = { key, at: now };
@@ -293,11 +371,16 @@ export function useAutoMode(actions: AutoActions) {
       clearTimer();
       // A hymn number goes on the screen at once (it then stays until another hymn number is said).
       // A quote found without a number or reference always gets a cancel window (at least 2 seconds).
-      const delay = slow
-        ? Math.max(2, settingsRef.current.delaySeconds)
-        : command.type === "hymn" && settingsRef.current.hymnInstant
-          ? 0
-          : settingsRef.current.delaySeconds;
+      const s = settingsRef.current;
+      const instant =
+        command.type === "next" ||
+        command.type === "previous" ||
+        command.type === "blank" ||
+        command.type === "language" ||
+        command.type === "announcement" ||
+        (command.type === "hymn" && s.hymnInstant) ||
+        (command.type === "verse" && s.verseInstant);
+      const delay = slow ? Math.max(2, s.delaySeconds) : instant ? 0 : s.delaySeconds;
 
       if (delay <= 0) {
         setPending(null);
@@ -323,6 +406,46 @@ export function useAutoMode(actions: AutoActions) {
     [addLog, clearTimer, run]
   );
 
+  // "Let's see the meaning of happiness": an AI writes a short meaning, which goes on the screen as a text slide.
+  // When Yoruba is included, it waits in the preview so you can check the Yoruba before pressing Update screen.
+  const runDefine = useCallback(
+    async (command: Extract<SpokenCommand, { type: "define" }>, heardText: string) => {
+      const language = command.language ?? settingsRef.current.meaningLanguage;
+      if (!actionsRef.current.showText) {
+        addLog(heardText, "Meanings are not set up on this page yet");
+        return;
+      }
+      setLookup(`Looking up the meaning of "${command.term}"...`);
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.auth.getSession();
+        const token = data?.session?.access_token;
+        if (!token) throw new Error("not signed in");
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch("/api/voice/define", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ term: command.term, language }),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
+
+        const body = await res.json();
+        if (!res.ok || !body?.english) throw new Error(body?.error ?? "no meaning");
+
+        const needsCheck = language !== "english" && settingsRef.current.checkYoruba;
+        actionsRef.current.showText?.(meaningTitle(body.term ?? command.term), formatMeaning(body, language), !needsCheck);
+        addLog(heardText, needsCheck ? `Meaning of ${command.term} is in the preview: check the Yoruba, then press Update screen` : `Shown: meaning of ${command.term}`);
+      } catch {
+        addLog(heardText, `Could not look up "${command.term}" (AI unavailable)`);
+      } finally {
+        setLookup("");
+      }
+    },
+    [addLog]
+  );
+
   const handleCommand = useCallback(
     (command: SpokenCommand, text: string) => {
       if (command.type === "pause") {
@@ -335,6 +458,8 @@ export function useAutoMode(actions: AutoActions) {
         resume(text.trim());
       } else if (command.type === "goto") {
         gotoVerse(command.verse, text.trim());
+      } else if (command.type === "define") {
+        runDefine(command, text.trim());
       } else if (command.type === "scroll") {
         if (command.where === "top" || command.where === "bottom") scrollTo(command.where);
         else scrollBy(command.where === "down" ? 1 : -1, command.amount);
@@ -343,7 +468,7 @@ export function useAutoMode(actions: AutoActions) {
         schedule(command, text.trim());
       }
     },
-    [addLog, gotoVerse, pause, resume, schedule, scrollBy, scrollTo]
+    [addLog, gotoVerse, pause, resume, runDefine, schedule, scrollBy, scrollTo]
   );
 
   const logRef = useRef(addLog);
@@ -488,6 +613,10 @@ export function useAutoMode(actions: AutoActions) {
       if (typeof saved.stepLines === "number" && saved.stepLines >= 1 && saved.stepLines <= 6) setStepLines(saved.stepLines);
       if (typeof saved.hymnInstant === "boolean") setHymnInstant(saved.hymnInstant);
       if (typeof saved.quotes === "boolean") setQuotes(saved.quotes);
+      if (["english", "yoruba", "both"].includes(saved.meaningLanguage)) setMeaningLanguage(saved.meaningLanguage);
+      if (typeof saved.checkYoruba === "boolean") setCheckYoruba(saved.checkYoruba);
+      if (typeof saved.verseInstant === "boolean") setVerseInstant(saved.verseInstant);
+      if (typeof saved.autoAdvance === "boolean") setAutoAdvance(saved.autoAdvance);
       if (typeof saved.pace === "number" && saved.pace >= 0 && saved.pace <= 60) setPace(saved.pace);
     } catch {
       // Ignore unreadable saved settings.
@@ -498,11 +627,11 @@ export function useAutoMode(actions: AutoActions) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ delaySeconds, navigation, accent, follow, gate, ai, stepLines, hymnInstant, pace, quotes }));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ delaySeconds, navigation, accent, follow, gate, ai, stepLines, hymnInstant, pace, quotes, meaningLanguage, checkYoruba, verseInstant, autoAdvance }));
     } catch {
       // Settings simply will not be remembered.
     }
-  }, [delaySeconds, navigation, accent, follow, gate, ai, stepLines, hymnInstant, pace, quotes]);
+  }, [delaySeconds, navigation, accent, follow, gate, ai, stepLines, hymnInstant, pace, quotes, meaningLanguage, checkYoruba, verseInstant, autoAdvance]);
 
   // ---- timed scrolling: when singing cannot be followed by the microphone, move on every few seconds ----
   useEffect(() => {
@@ -560,6 +689,13 @@ export function useAutoMode(actions: AutoActions) {
 
   const quiet = () => settingsRef.current.gate !== "off" && Date.now() - lastLoudAt.current > 1500;
 
+  // Is the person just reading out what is already on the screen? Then it is not a new quote or a command.
+  const readingTheScreen = (text: string) => {
+    const state = alignRef.current;
+    const w = text.trim().split(/\s+/);
+    return !!state && w.length >= 3 && state.aligner.overlap(w) >= 0.6;
+  };
+
   // ---- the microphone listener ----
   useEffect(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -611,10 +747,18 @@ export function useAutoMode(actions: AutoActions) {
           if (instant) {
             instantTimer.current = setTimeout(() => handleCommandRef.current(instant, text), 450);
           }
+
+          // A hymn number or Bible reference is acted on while the person is still speaking, once it has stayed the same for a moment.
+          if (refTimer.current) clearTimeout(refTimer.current);
+          const reference = parseSpoken(text, { navigation: false });
+          if (reference && (reference.type === "hymn" || reference.type === "verse") && !readingTheScreen(text)) {
+            refTimer.current = setTimeout(() => handleCommandRef.current(reference, text), 1000);
+          }
           continue;
         }
 
         if (instantTimer.current) clearTimeout(instantTimer.current);
+        if (refTimer.current) clearTimeout(refTimer.current);
         setHeard("");
         if (!String(result[0]?.transcript ?? "").trim()) continue; // silence: nothing to do, nothing to list
         let matched = false;
@@ -632,7 +776,7 @@ export function useAutoMode(actions: AutoActions) {
           const moved = feedRef.current(result[0].transcript);
           // Short sentences that were not a command are listed, so you can see what the microphone actually heard.
           const heardText: string = result[0].transcript;
-          if (!moved) {
+          if (!moved && !readingTheScreen(heardText)) {
             const short = heardText.trim().split(/\s+/).length <= 16;
             if (short && settingsRef.current.ai && looksLikeCommand(heardText)) aiRef.current(heardText);
             else if (settingsRef.current.quotes && looksLikeQuote(heardText)) quoteRef.current(heardText);
@@ -704,12 +848,30 @@ export function useAutoMode(actions: AutoActions) {
     [clearTimer]
   );
 
+  // When the passage on the screen changes, forget the old reading position straight away (not only when the next words are heard).
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const passage = actionsRef.current.getPassage();
+      const key = passage.live && passage.text ? textKey(passage.text) + (passage.numbered ? "n" : "") : "";
+      if (alignRef.current && alignRef.current.key !== key) {
+        alignRef.current = null;
+        if (advanceTimer.current) {
+          clearTimeout(advanceTimer.current);
+          advanceTimer.current = null;
+        }
+        setReading({ verse: null, word: -1, total: 0 });
+      }
+    }, 400);
+    return () => clearInterval(timer);
+  }, []);
+
   const toggle = useCallback(() => {
     if (enabled) {
       cancelPending("Auto mode switched off");
       setPaused(false);
       pausedRef.current = false;
     }
+    setError("");
     setEnabled(!enabled);
   }, [enabled, cancelPending]);
 
@@ -737,6 +899,15 @@ export function useAutoMode(actions: AutoActions) {
     setAi,
     quotes,
     setQuotes,
+    verseInstant,
+    setVerseInstant,
+    autoAdvance,
+    setAutoAdvance,
+    meaningLanguage,
+    setMeaningLanguage,
+    checkYoruba,
+    setCheckYoruba,
+    lookup,
     suggestions,
     acceptSuggestion,
     dismissSuggestions,

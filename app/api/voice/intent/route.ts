@@ -15,7 +15,11 @@ Commands:
 {"intent":"scroll","where":"down","amount":"normal"}  where: down, up, top, bottom. amount: small, normal, large.
 {"intent":"next"}  {"intent":"previous"}  {"intent":"blank"}  (clear the screen)
 {"intent":"pause"}  (wait, hold on, stop)   {"intent":"resume"}  (continue, go on)
-{"intent":"language","language":"yoruba"}  (show the current text in Yoruba or English)`;
+{"intent":"language","language":"yoruba"}  (show the current text in Yoruba or English)
+{"intent":"define","term":"happiness","language":"english"}  (the meaning or definition of a word or phrase: "let's see the meaning of happiness", "what does it mean to be happy". "term" is just the word or short phrase; "language" is english, yoruba or both, only if one is asked for)
+{"intent":"announcement"}  (show the announcements: "announcement", "show the announcements", "ikede")
+
+Common mishearings: "psalm" is often heard as "sam", "salm", "some" or "palm", so "sam 91" means Psalm 91. "next" means the next verse or slide. Yoruba and English are often mixed in one sentence: look for the command inside it, for example "e je ka dide ... orin hymn number 377" is hymn 377.`;
 
 const calls: number[] = [];
 

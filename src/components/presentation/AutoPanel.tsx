@@ -66,6 +66,7 @@ export default function AutoPanel({ voice }: { voice: AutoModeApi }) {
       )}
 
       {voice.error && <p className="mt-2 text-sm text-red-600">{voice.error}</p>}
+      {voice.lookup && <p className="mt-2 text-sm font-semibold text-navy">{voice.lookup}</p>}
 
       {voice.pending && (
         <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-gold bg-gold/10 px-4 py-3">
@@ -165,6 +166,18 @@ export default function AutoPanel({ voice }: { voice: AutoModeApi }) {
             </select>
           </div>
           <div>
+            <label className={labelClass}>Meaning of a word: language</label>
+            <select className={inputClass} value={voice.meaningLanguage} onChange={(e) => voice.setMeaningLanguage(e.target.value as "english" | "yoruba" | "both")}>
+              <option value="english">English</option>
+              <option value="both">Yoruba and English side by side</option>
+              <option value="yoruba">Yoruba</option>
+            </select>
+          </div>
+          <label className="flex items-end gap-2 pb-2 text-sm text-navy">
+            <input type="checkbox" checked={voice.checkYoruba} onChange={(e) => voice.setCheckYoruba(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
+            <span>Let me check the Yoruba in the preview before a meaning is shown (AI Yoruba can have mistakes)</span>
+          </label>
+          <div>
             <label className={labelClass}>Scroll after reading</label>
             <select className={inputClass} value={voice.stepLines} onChange={(e) => voice.setStepLines(Number(e.target.value))}>
               <option value={1}>every line</option>
@@ -185,6 +198,14 @@ export default function AutoPanel({ voice }: { voice: AutoModeApi }) {
               <option value={20}>every 20 seconds</option>
             </select>
           </div>
+          <label className="flex items-end gap-2 pb-2 text-sm text-navy">
+            <input type="checkbox" checked={voice.verseInstant} onChange={(e) => voice.setVerseInstant(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
+            <span>Show a Bible reference the moment it is said (no countdown), even while you are still speaking</span>
+          </label>
+          <label className="flex items-end gap-2 pb-2 text-sm text-navy">
+            <input type="checkbox" checked={voice.autoAdvance} onChange={(e) => voice.setAutoAdvance(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
+            <span>Move on by itself to the next verse or stanza when the last word is read</span>
+          </label>
           <label className="flex items-end gap-2 pb-2 text-sm text-navy">
             <input type="checkbox" checked={voice.hymnInstant} onChange={(e) => voice.setHymnInstant(e.target.checked)} className="mb-1 h-4 w-4 accent-navy" />
             <span>Show a hymn the moment its number is said (it stays until another hymn number is said)</span>

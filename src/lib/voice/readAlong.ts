@@ -78,12 +78,14 @@ export class Aligner {
   private words: string[] = []; // normalised words that can be matched
   private map: number[] = []; // position in `words` -> token index
   private pm = -1; // position in `words` of the last word read
+  private wordSet = new Set<string>();
 
   constructor(tokens: Token[]) {
     this.tokens = tokens;
     tokens.forEach((t, i) => {
       if (t.norm) {
         this.words.push(t.norm);
+        this.wordSet.add(t.norm);
         this.map.push(i);
       }
     });
@@ -98,6 +100,20 @@ export class Aligner {
     let count = 0;
     while (count < this.map.length && this.map[count] < tokenIndex) count++;
     this.pm = count - 1;
+  }
+
+  // How many words are still to be read (0 when the last word has been reached).
+  remaining(): number {
+    return this.words.length - 1 - this.pm;
+  }
+
+  // How much of what was heard is made of words found in this text (0 to 1). High means the person is reading what is on the screen.
+  overlap(heard: string[]): number {
+    const spoken = heard.map(normalizeWord).filter((w) => w.length >= 3);
+    if (spoken.length < 3) return 0;
+    let shared = 0;
+    for (const w of spoken) if (this.wordSet.has(w)) shared++;
+    return shared / spoken.length;
   }
 
   // The next few words the text expects, so a stray "wait" inside a verse is not mistaken for a command.

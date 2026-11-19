@@ -5,6 +5,8 @@ export type SpokenCommand =
   | { type: "hymn"; number: string; language?: "english" | "yoruba"; label: string }
   | { type: "next" | "previous" | "blank" | "pause" | "resume"; label: string }
   | { type: "goto"; verse: number; label: string }
+  | { type: "announcement"; label: string }
+  | { type: "define"; term: string; language?: "english" | "yoruba" | "both"; label: string }
   | { type: "scroll"; where: "down" | "up" | "top" | "bottom"; amount: "small" | "normal" | "large"; label: string }
   | { type: "language"; language: "english" | "yoruba"; label: string };
 
@@ -17,8 +19,8 @@ const BOOKS: { name: string; aliases: string[] }[] = [
   { name: "Joshua", aliases: ["joshua"] },
   { name: "Judges", aliases: ["judges"] },
   { name: "Ruth", aliases: ["ruth"] },
-  { name: "1 Samuel", aliases: ["1 samuel"] },
-  { name: "2 Samuel", aliases: ["2 samuel"] },
+  { name: "1 Samuel", aliases: ["1 samuel", "1 sam"] },
+  { name: "2 Samuel", aliases: ["2 samuel", "2 sam"] },
   { name: "1 Kings", aliases: ["1 kings"] },
   { name: "2 Kings", aliases: ["2 kings"] },
   { name: "1 Chronicles", aliases: ["1 chronicles"] },
@@ -27,7 +29,8 @@ const BOOKS: { name: string; aliases: string[] }[] = [
   { name: "Nehemiah", aliases: ["nehemiah"] },
   { name: "Esther", aliases: ["esther"] },
   { name: "Job", aliases: ["job"] },
-  { name: "Psalm", aliases: ["psalm", "psalms"] },
+  // "psalm" is often heard as "sam", "salm" and similar.
+  { name: "Psalm", aliases: ["psalm", "psalms", "sam", "salm", "sarm", "psalam", "saam", "psam", "psalmn", "sulm", "saum"] },
   { name: "Proverbs", aliases: ["proverbs", "proverb"] },
   { name: "Ecclesiastes", aliases: ["ecclesiastes"] },
   { name: "Song of Solomon", aliases: ["song of solomon", "song of songs", "songs of solomon"] },
@@ -149,10 +152,15 @@ const YORUBA_BOOKS: { name: string; aliases: string[] }[] = [
 
 type Lang = "english" | "yoruba";
 
-const ALIASES = [
+// Ordinary English words that "psalm" is sometimes heard as: only counted in a short command or after "turn to", "read", "open"...
+const WEAK_BOOKS: { name: string; aliases: string[] }[] = [{ name: "Psalm", aliases: ["some", "palm", "same"] }];
+const BOOK_LEADS = new Set(["go", "turn", "open", "read", "let", "lets", "show", "take", "bring", "now", "please", "to"]);
+
+const ALIASES = ([
   ...BOOKS.flatMap((b) => b.aliases.map((alias) => ({ alias, tokens: alias.split(" "), name: b.name, lang: "english" as Lang }))),
   ...YORUBA_BOOKS.flatMap((b) => b.aliases.map((alias) => ({ alias, tokens: alias.split(" "), name: b.name, lang: "yoruba" as Lang }))),
-].sort((a, b) => b.tokens.length - a.tokens.length);
+  ...WEAK_BOOKS.flatMap((b) => b.aliases.map((alias) => ({ alias, tokens: alias.split(" "), name: b.name, lang: "english" as Lang, weak: true }))),
+] as { alias: string; tokens: string[]; name: string; lang: Lang; weak?: boolean }[]).sort((a, b) => b.tokens.length - a.tokens.length);
 
 // Yoruba number words 1-20, accents removed. (Larger numbers are normally written as digits by the recogniser.)
 const YORUBA_NUMBERS: Record<string, string> = {
@@ -256,13 +264,13 @@ function isNum(t: string | undefined): boolean {
   return !!t && /^\d{1,3}$/.test(t);
 }
 
-function matchBookAt(tokens: string[], i: number): { name: string; length: number; lang: Lang } | null {
+function matchBookAt(tokens: string[], i: number): { name: string; length: number; lang: Lang; weak?: boolean } | null {
   for (const entry of ALIASES) {
     const slice = tokens.slice(i, i + entry.tokens.length);
     if (slice.length < entry.tokens.length) continue;
     const joined = slice.join(" ");
-    if (joined === entry.alias) return { name: entry.name, length: entry.tokens.length, lang: entry.lang };
-    if (entry.tokens.length === 1 && joined !== "number") {
+    if (joined === entry.alias) return { name: entry.name, length: entry.tokens.length, lang: entry.lang, weak: entry.weak };
+    if (entry.tokens.length === 1 && joined !== "number" && !entry.weak) {
       const longEnough = entry.lang === "yoruba" ? entry.alias.length >= 5 : entry.alias.length >= 7;
       const allowed = entry.alias.length >= 8 ? 2 : 1;
       if (longEnough && Math.abs(joined.length - entry.alias.length) <= allowed && levenshtein(joined, entry.alias) <= allowed) {
@@ -279,6 +287,8 @@ function findVerseCommand(tokens: string[]): SpokenCommand | null {
   for (let i = 0; i < tokens.length; i++) {
     const book = matchBookAt(tokens, i);
     if (!book) continue;
+    // "some 23" / "palm 23": only when it is clearly a command, not a sentence that happens to contain "some" and a number.
+    if (book.weak && !(tokens.length <= 2 || tokens.slice(Math.max(0, i - 3), i).some((t) => BOOK_LEADS.has(t)))) continue;
 
     let j = i + book.length;
     while (j < tokens.length && (tokens[j] === "chapter" || tokens[j] === "ch" || tokens[j] === "the" || tokens[j] === "ori")) j++;
@@ -318,14 +328,54 @@ function findVerseCommand(tokens: string[]): SpokenCommand | null {
   return found;
 }
 
+// "let's see the meaning of happiness", "what does it mean to be happy", "define grace", "what does mercy mean", "itumo ayo".
+const DEFINE_LEAD = "(?:(?:let s see|lets see|let us see|show us|show me|show|tell us|tell me|give us|please|okay|ok|now) )*";
+
+function findDefineCommand(tokens: string[]): SpokenCommand | null {
+  if (tokens.length < 2 || tokens.length > 12 || tokens.some((t) => /\d/.test(t))) return null;
+  let phrase = tokens.join(" ");
+
+  let language: "english" | "yoruba" | "both" | undefined;
+  const tail = /\s+in (yoruba|english|both languages|both)$/.exec(phrase);
+  if (tail) {
+    language = tail[1].startsWith("both") ? "both" : (tail[1] as "english" | "yoruba");
+    phrase = phrase.slice(0, tail.index);
+  }
+
+  let term: string | null = null;
+  let m: RegExpExecArray | null;
+
+  if ((m = new RegExp(`^${DEFINE_LEAD}(?:what is |what s )?(?:the )?(?:meaning|definition)s? of (?:the )?(?:word )?(.+)$`).exec(phrase))) {
+    // Without a lead-in ("show us...", "what is...") only a short phrase counts, so a sentence of preaching is not taken as a request.
+    const bare = /^(?:the )?(?:meaning|definition)s? of /.test(phrase);
+    if (!bare || phrase.split(" ").length <= 5) term = m[1];
+  } else if ((m = /^what does it mean to (be )?(.+)$/.exec(phrase))) {
+    term = `to ${m[1] ? "be " : ""}${m[2]}`;
+  } else if ((m = /^what does (?:the word )?(.+?) mean$/.exec(phrase))) {
+    term = m[1];
+  } else if ((m = /^define (?:the word )?(.+)$/.exec(phrase))) {
+    term = m[1];
+  } else if ((m = /^(?:ki ni |what is the )?itumo (?:oro )?(.+)$/.exec(phrase))) {
+    term = m[1];
+  }
+
+  if (!term) return null;
+  term = term.replace(/^(?:a|an|the) /, "").replace(/ (?:please|for us|now)$/, "").trim();
+  const count = term.split(" ").length;
+  if (count < 1 || count > 5 || /\b(?:is|are|was|were|means|and|but|because|that|this|we|you|i)\b/.test(term)) return null;
+
+  return { type: "define", term, language, label: `Meaning of ${term}` };
+}
+
 // "hymn" is often heard as "him" or "hem", so those count too, but only when the rest of the sentence makes a hymn clear.
 const HYMN_STRONG = new Set(["hymn", "hymns", "hymnal", "hymnbook", "orin"]);
 const HYMN_WEAK = new Set(["him", "hims", "hem", "hymm", "himn", "hymen", "hymnn", "in", "inn", "im", "ham", "hum"]);
 // Very common words: only counted in a short command such as "in number 176".
 const HYMN_AMBIGUOUS = new Set(["in", "inn", "im", "ham", "hum"]);
-const HYMN_FILLER = new Set(["book", "number", "no", "num", "nomba", "at", "is", "of", "the", "from", "our", "in", "a", "on", "to", "for"]);
+const HYMN_FILLER = new Set(["book", "number", "no", "num", "nomba", "numba", "namba", "nomber", "at", "is", "of", "the", "from", "our", "in", "a", "on", "to", "for"]);
 // "numbers" with an S is the Bible book, so it is not a number word here.
-const NUMBER_WORDS = new Set(["number", "no", "num", "nomba"]);
+// "numbers" with an S is the Bible book, so it is not a number word here.
+const NUMBER_WORDS = new Set(["number", "no", "num", "nomba", "numba", "namba", "nomber"]);
 const HYMN_LEADS = new Set(["go", "turn", "open", "show", "lets", "let", "take", "sing", "bring", "read", "now", "please"]);
 
 function findHymnCommand(tokens: string[]): SpokenCommand | null {
@@ -425,6 +475,14 @@ function findGotoCommand(tokens: string[]): SpokenCommand | null {
   return null;
 }
 
+// "next", "next verse", "go to the next one", "move forward please"; "back", "go back", "previous verse", "last one".
+const NAV_GO = "(?:(?:go|move|turn|show|take us|take me|bring|let s|lets|please|okay|ok|now) )*";
+const NAV_TAIL = "(?: (?:one|1|verse|verses|slide|stanza|page|line|lines|please|now|again))*";
+const NEXT_RE = new RegExp(`^${NAV_GO}(?:to )?(?:the )?(?:next|nex|nest|forward|onward|following)${NAV_TAIL}$`);
+const PREVIOUS_RE = new RegExp(`^${NAV_GO}(?:to )?(?:the )?(?:previous|back|last|earlier)${NAV_TAIL}$`);
+// "announcement", "show the announcements", "it is time for announcements", "ikede".
+const ANNOUNCEMENT_RE = /^(?:(?:show|display|put up|bring up|bring out|let s see|lets see|we will have|now|please|okay|ok|time for|it is time for|let us have|give us) )*(?:the )?(?:church )?(?:announcements?|ikede)(?: please| now)?$/;
+
 // Short stand-alone phrases only, so ordinary preaching ("the next verse says...") does not move the screen.
 function findControlCommand(tokens: string[], allowNavigation: boolean): SpokenCommand | null {
   if (tokens.length === 0) return null;
@@ -443,10 +501,11 @@ function findControlCommand(tokens: string[], allowNavigation: boolean): SpokenC
   const goto = findGotoCommand(tokens);
   if (goto) return goto;
 
-  if (tokens.length > 4) return null;
+  if (tokens.length > 6) return null;
 
-  if (/^(next|forward) (verse|slide|stanza|page)$/.test(text) || /^(go )?next( slide)?$/.test(text)) return { type: "next", label: "Next" };
-  if (/^(previous|back|last) (verse|slide|stanza|page)$/.test(text) || /^go back$/.test(text)) return { type: "previous", label: "Previous" };
+  if (NEXT_RE.test(text)) return { type: "next", label: "Next" };
+  if (PREVIOUS_RE.test(text)) return { type: "previous", label: "Previous" };
+  if (ANNOUNCEMENT_RE.test(text)) return { type: "announcement", label: "Announcement" };
   if (/^(blank|clear|hide|remove) (the )?(screen|slide|display)$/.test(text) || /^blank screen$/.test(text)) return { type: "blank", label: "Blank screen" };
   if (/^(in |show |switch to |read in )?yoruba$/.test(text)) return { type: "language", language: "yoruba", label: "Yoruba" };
   if (/^(in |show |switch to |read in )?english$/.test(text)) return { type: "language", language: "english", label: "English" };
@@ -457,7 +516,7 @@ export function parseSpoken(text: string, options: { navigation: boolean } = { n
   const tokens = tokenize(text);
   if (tokens.length === 0) return null;
 
-  return findControlCommand(tokens, options.navigation) ?? findHymnCommand(tokens) ?? findVerseCommand(tokens);
+  return findControlCommand(tokens, options.navigation) ?? findDefineCommand(tokens) ?? findHymnCommand(tokens) ?? findVerseCommand(tokens);
 }
 
 export const BOOK_NAMES: string[] = BOOKS.map((b) => b.name);
@@ -497,10 +556,18 @@ export function commandFromIntent(raw: any): SpokenCommand | null {
       return { type: "previous", label: "Previous" };
     case "blank":
       return { type: "blank", label: "Blank screen" };
+    case "announcement":
+      return { type: "announcement", label: "Announcement" };
     case "pause":
       return { type: "pause", label: "Pause" };
     case "resume":
       return { type: "resume", label: "Continue" };
+    case "define": {
+      const term = String(raw.term ?? "").trim().slice(0, 60);
+      if (!/^[\p{L}\p{M}' -]{1,60}$/u.test(term)) return null;
+      const language = raw.language === "yoruba" ? "yoruba" : raw.language === "both" ? "both" : raw.language === "english" ? "english" : undefined;
+      return { type: "define", term, language, label: `Meaning of ${term}` };
+    }
     case "language":
       return lang ? { type: "language", language: lang, label: lang === "yoruba" ? "Yoruba" : "English" } : null;
     default:
@@ -512,7 +579,7 @@ export function commandFromIntent(raw: any): SpokenCommand | null {
 export function looksLikeCommand(text: string): boolean {
   const tokens = tokenize(text);
   if (tokens.length === 0 || tokens.length > 16) return false;
-  const words = new Set(["hymn", "hymns", "him", "hem", "book", "number", "verse", "verses", "chapter", "scroll", "turn", "open", "show", "bring", "next", "previous", "blank", "clear", "yoruba", "english", "orin", "psalm", "psalms", "ese", "ori", "wait", "continue", "hold", "back"]);
+  const words = new Set(["announcement", "announcements", "ikede", "meaning", "define", "definition", "mean", "itumo", "hymn", "hymns", "him", "hem", "book", "number", "verse", "verses", "chapter", "scroll", "turn", "open", "show", "bring", "next", "previous", "blank", "clear", "yoruba", "english", "orin", "psalm", "psalms", "ese", "ori", "wait", "continue", "hold", "back"]);
   if (tokens.some((t) => words.has(t))) return true;
   return tokens.some((t) => /^\d{1,4}$/.test(t)) && tokens.length <= 8;
 }

@@ -10,6 +10,7 @@ import { buildLines, type Lines } from "@/lib/voice/readAlong";
 //  - Yoruba and English can sit side by side, row by row (a line holding only "‖" separates the two columns).
 
 export const COLUMN_MARK = "‖";
+const MANUAL_HOLD_MS = 12000; // after you scroll by hand, automatic scrolling waits this long
 
 export interface ScreenCommand {
   nonce: number;
@@ -98,7 +99,14 @@ function layout(p: Lines): Item[] {
 }
 
 export default function ProjectorScreen(props: ProjectorScreenProps) {
-  const { width, height, title, text, numbered, language, pos, step, command } = props;
+  const { width, height, title, text, numbered, language, step, command } = props;
+
+  // When a new passage appears, the reading position still held by the page that sent it belongs to the OLD passage.
+  // Ignore that one value, so the new passage always starts at its beginning with nothing marked as read.
+  const stalePos = useRef<{ text: string; pos: number } | null>(null);
+  if (stalePos.current === null || stalePos.current.text !== text) stalePos.current = { text, pos: props.pos };
+  if (props.pos !== stalePos.current.pos) stalePos.current.pos = Number.NaN; // replaced by a fresh position: from here on every position counts
+  const pos = props.pos === stalePos.current.pos ? -1 : props.pos;
   const boxRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const wordRefs = useRef<Record<number, HTMLElement | null>>({});
@@ -188,7 +196,7 @@ export default function ProjectorScreen(props: ProjectorScreenProps) {
 
     if (command.kind === "word") {
       // Exact sync with the control page's preview: the same word goes to the top of this screen.
-      manualUntil.current = Date.now() + 5000;
+      manualUntil.current = Date.now() + MANUAL_HOLD_MS;
       const target = command.word !== undefined ? wordRefs.current[command.word] : null;
       if (target && el) {
         box.scrollTo({ top: Math.max(0, el.offsetTop + target.offsetTop - 2), behavior: "auto" });
@@ -197,16 +205,16 @@ export default function ProjectorScreen(props: ProjectorScreenProps) {
         box.scrollTo({ top: Math.max(0, Math.min(1, command.ratio ?? 0)) * max, behavior: "auto" });
       }
     } else if (command.kind === "ratio") {
-      manualUntil.current = Date.now() + 5000;
+      manualUntil.current = Date.now() + MANUAL_HOLD_MS;
       const max = box.scrollHeight - box.clientHeight;
       box.scrollTo({ top: Math.max(0, Math.min(1, command.ratio ?? 0)) * max, behavior: "auto" });
     } else if (command.kind === "lines") {
       box.scrollBy({ top: (command.lines ?? 2) * lh, behavior: "smooth" });
     } else if (command.kind === "to") {
-      manualUntil.current = Date.now() + 5000;
+      manualUntil.current = Date.now() + MANUAL_HOLD_MS;
       box.scrollTo({ top: command.to === "bottom" ? box.scrollHeight : 0, behavior: "smooth" });
     } else {
-      manualUntil.current = Date.now() + 5000;
+      manualUntil.current = Date.now() + MANUAL_HOLD_MS;
       const share = command.amount === "small" ? 0.2 : command.amount === "large" ? 0.9 : 0.5;
       box.scrollBy({ top: (command.dir === -1 ? -1 : 1) * box.clientHeight * share, behavior: "smooth" });
     }
@@ -220,7 +228,7 @@ export default function ProjectorScreen(props: ProjectorScreenProps) {
     // Anything that is not this screen's own automatic scrolling is the person scrolling by hand.
     if (Date.now() < programmaticUntil.current) return;
 
-    manualUntil.current = Date.now() + 5000;
+    manualUntil.current = Date.now() + MANUAL_HOLD_MS;
     const send = () => {
       const max = box.scrollHeight - box.clientHeight;
       const el = textRef.current;
