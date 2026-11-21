@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAutoMode } from "@/lib/voice/useAutoMode";
 import AutoPanel from "@/components/presentation/AutoPanel";
+import { BOOK_NAMES, canonicalBook } from "@/lib/voice/parseSpoken";
 import ProjectorScreen, { COLUMN_MARK, type ScreenCommand } from "@/components/presentation/ProjectorScreen";
 
 type Tab = "verse" | "hymn" | "custom";
@@ -510,40 +511,79 @@ export default function PresentationControlPage() {
     const first = Math.min(...numbers);
     const last = Math.max(...numbers);
     const span = Math.max(1, Math.min(versesPerSlide, 4));
-    let start: number;
-    let end: number;
-    if (direction > 0) {
-      start = last + 1;
-      end = last + span;
-    } else {
-      if (first <= 1) {
-        setStatus("That is the first verse.");
-        return true;
-      }
-      end = first - 1;
-      start = Math.max(1, first - span);
-    }
+    const chapterNumber = parseInt(chapter, 10) || 1;
 
-    const attempt = async (s: number, e: number): Promise<LookupResult | null> => {
+    const ask = async (b: string, c: string, s: string, e: string): Promise<LookupResult | null> => {
       const res = await fetch("/api/presentation/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "verse", book, chapter, verseStart: String(s), verseEnd: String(e), language }),
+        body: JSON.stringify({ type: "verse", book: b, chapter: c, verseStart: s, verseEnd: e, language }),
       });
-      return res.ok ? ((await res.json()) as LookupResult) : null;
+      if (!res.ok) return null;
+      const data = (await res.json()) as LookupResult;
+      return data.verses && data.verses.length > 0 ? data : null;
     };
 
-    try {
-      let data = await attempt(start, end);
-      if (!data && direction > 0 && end > start) data = await attempt(start, start); // the chapter may end before the full span
-      if (!data || !data.verses || data.verses.length === 0) {
-        setStatus(direction > 0 ? "That was the last verse of the chapter." : "That is the first verse.");
-        return true;
-      }
-      const shown = data.verses.map((v) => v.verse);
+    // Show what was found and keep the form fields in step with it. A lookup that fails never clears the screen.
+    const show = (data: LookupResult, b: string, c: string) => {
+      const shown = (data.verses ?? []).map((v) => v.verse);
+      setBook(b);
+      setChapter(c);
       setVerseStart(String(Math.min(...shown)));
       setVerseEnd(String(Math.max(...shown)));
       applyResult(data, isLive);
+    };
+
+    try {
+      if (direction > 0) {
+        // 1) the following verse(s) of this chapter
+        let data = await ask(book, chapter, String(last + 1), String(last + span));
+        if (!data && span > 1) data = await ask(book, chapter, String(last + 1), String(last + 1)); // the chapter may end before the full span
+        if (data) {
+          show(data, book, chapter);
+          return true;
+        }
+        // 2) the chapter has ended: the next chapter of the same book
+        const nextChapter = String(chapterNumber + 1);
+        data = await ask(book, nextChapter, "", "");
+        if (data) {
+          show(data, book, nextChapter);
+          setStatus(`Now in ${book} ${nextChapter}`);
+          return true;
+        }
+        // 3) the book has ended: the first chapter of the next book
+        const at = BOOK_NAMES.indexOf(canonicalBook(book) ?? book);
+        const nextBook = at >= 0 ? BOOK_NAMES[at + 1] : undefined;
+        if (nextBook) {
+          data = await ask(nextBook, "1", "", "");
+          if (data) {
+            show(data, nextBook, "1");
+            setStatus(`Now in ${nextBook} 1`);
+            return true;
+          }
+        }
+        setStatus("That was the last verse of the Bible.");
+        return true;
+      }
+
+      // Previous
+      if (first > 1) {
+        const data = await ask(book, chapter, String(Math.max(1, first - span)), String(first - 1));
+        if (data) {
+          show(data, book, chapter);
+          return true;
+        }
+      } else if (chapterNumber > 1) {
+        // the first verse of a chapter: go back to the previous chapter
+        const previousChapter = String(chapterNumber - 1);
+        const data = await ask(book, previousChapter, "", "");
+        if (data) {
+          show(data, book, previousChapter);
+          setStatus(`Back in ${book} ${previousChapter}`);
+          return true;
+        }
+      }
+      setStatus("That is the first verse.");
     } catch {
       setStatus("Network error. Try again.");
     }
@@ -950,7 +990,7 @@ export default function PresentationControlPage() {
           </div>
           <button
             onClick={() => (slideIndex > 0 ? goTo(slideIndex - 1) : void continueVerses(-1))}
-            disabled={result?.content_type === "verse" && result.verses && result.verses.length > 0 ? slideIndex <= 0 && Math.min(...result.verses.map((v) => v.verse)) <= 1 : slides.length < 2 || slideIndex <= 0}
+            disabled={result?.content_type === "verse" && result.verses && result.verses.length > 0 ? slideIndex <= 0 && Math.min(...result.verses.map((v) => v.verse)) <= 1 && (parseInt(chapter, 10) || 1) <= 1 : slides.length < 2 || slideIndex <= 0}
             className="rounded-lg border border-navy/20 px-4 py-3 text-sm font-semibold text-navy disabled:opacity-40"
           >
             ◀ Previous

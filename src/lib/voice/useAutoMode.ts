@@ -455,7 +455,13 @@ export function useAutoMode(actions: AutoActions) {
         if (state && settingsRef.current.follow && state.aligner.upcoming(3).includes(first)) return;
         pause(text.trim());
       } else if (command.type === "resume") {
-        resume(text.trim());
+        if (pausedRef.current) {
+          resume(text.trim());
+        } else if (actionsRef.current.getPassage().live) {
+          // Nothing is paused, so "continue" / "go on" means: carry on to the next verse.
+          addLog(text.trim(), "Continue: next verse");
+          smartNextRef.current();
+        }
       } else if (command.type === "goto") {
         gotoVerse(command.verse, text.trim());
       } else if (command.type === "define") {
@@ -725,7 +731,10 @@ export function useAutoMode(actions: AutoActions) {
     recognition.maxAlternatives = 3;
     recognition.lang = accent;
 
-    recognition.onstart = () => setListening(true);
+    recognition.onstart = () => {
+      setListening(true);
+      setError((e) => (e.startsWith("The speech service") ? "" : e));
+    };
 
     recognition.onresult = (event: any) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -739,6 +748,7 @@ export function useAutoMode(actions: AutoActions) {
         if (!result.isFinal) {
           const text: string = result[0].transcript;
           setHeard(text);
+          setError((e) => (e.startsWith("The speech service") ? "" : e));
           feedRef.current(text);
 
           // "Wait" / "continue" act quickly, but only once the speaker has stopped on that word for a moment.
@@ -796,7 +806,7 @@ export function useAutoMode(actions: AutoActions) {
       } else if (event.error === "language-not-supported") {
         setError("This browser does not support that language for listening. Choose Nigerian English instead.");
       } else if (event.error === "network") {
-        setError("The speech service cannot be reached. Check the internet connection. Trying again...");
+        setError("The speech service cannot be reached. Chrome sends your voice to Google to turn it into text, so it needs working internet. It is trying again by itself.");
       }
     };
 
