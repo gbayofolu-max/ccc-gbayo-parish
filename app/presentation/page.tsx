@@ -180,6 +180,19 @@ export default function PresentationPage() {
     return () => clearInterval(timer);
   }, [debug]);
 
+  // The page behind the projector layer must not scroll or show through.
+  useEffect(() => {
+    const html = document.documentElement.style.overflow;
+    const body = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    return () => {
+      document.documentElement.style.overflow = html;
+      document.body.style.overflow = body;
+    };
+  }, []);
+
   const acquireWakeLock = useCallback(async () => {
     try {
       wakeLock.current = await (navigator as any).wakeLock?.request("screen");
@@ -208,7 +221,11 @@ export default function PresentationPage() {
   }
 
   return (
-    <main className={`h-screen w-full overflow-hidden bg-navy ${started ? "cursor-none" : ""}`}>
+    <main
+      className={`overflow-hidden bg-navy ${started ? "cursor-none" : ""}`}
+      // A full-screen layer above the website's header, the floating button and everything else, so nothing covers the projected text.
+      style={{ position: "fixed", top: 0, right: 0, bottom: 0, left: 0, zIndex: 2147483000 }}
+    >
       {isBlank || size.w === 0 ? (
         <div className="flex h-full w-full items-center justify-center font-serif text-4xl text-gold/30">{churchName}</div>
       ) : (
